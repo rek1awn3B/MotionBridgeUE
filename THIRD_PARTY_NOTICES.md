@@ -17,24 +17,11 @@ The upstream parser is not imported or executed by MotionBridge.
 
 - Files: `data/bvh/100style/*.bvh`
 - Dataset: <https://www.ianxmason.com/100style/>
-- License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Attribution: The 100STYLE Dataset — Ian Mason
 
 The files are excerpts of `Neutral_FW.bvh`. MotionBridge preserves the source
 skeleton and motion samples and creates derived root-motion/retargeting assets.
-
-## SFU Motion Capture Database
-
-SFU data is not part of the public repository. Earlier local experiments used
-`0005_Walking001.bvh`; those files and derived demonstrations are retained only
-under the ignored `local_assets/sfu/` directory.
-
-The official SFU page states that the dataset is free for research purposes and
-cannot be used for commercial products or resale:
-<https://mocap.cs.sfu.ca/>
-
-Do not publish, redistribute, or use the archived SFU material in a commercial
-portfolio without obtaining permission from the dataset owner.
 
 ## Epic Games Unreal Engine template content
 

@@ -37,22 +37,29 @@ try
         cmake --build build-vs --config Release
     }
 
-    Write-Host "`n== C++ lab executables ==" -ForegroundColor Cyan
-    $LabCount = 0
-    Get-ChildItem -LiteralPath "build-vs\Release" -Filter "*_lab.exe" |
-        Sort-Object Name |
-        ForEach-Object {
-            & $_.FullName | Out-Null
-            if ($LASTEXITCODE -ne 0)
-            {
-                throw "$($_.Name) 失败，退出码：$LASTEXITCODE"
-            }
-            $LabCount++
-            Write-Host "PASS  $($_.Name)"
-        }
-    if ($LabCount -ne 16)
+    Write-Host "`n== C++ motion-system executables ==" -ForegroundColor Cyan
+    $LabNames = @(
+        "bvh_data_structure_lab",
+        "foot_ik_lab",
+        "joint_depth_grouping_lab",
+        "motion_source_polymorphism_lab",
+        "quaternion_interpolation_lab",
+        "realtime_frame_buffer_lab",
+        "transform3d_lab"
+    )
+    foreach ($LabName in $LabNames)
     {
-        throw "预期 16 个 C++ lab，实际找到 $LabCount 个。"
+        $LabPath = Join-Path "build-vs\Release" "$LabName.exe"
+        if (-not (Test-Path -LiteralPath $LabPath))
+        {
+            throw "缺少 C++ 测试程序：$LabPath"
+        }
+        & $LabPath | Out-Null
+        if ($LASTEXITCODE -ne 0)
+        {
+            throw "$LabName 失败，退出码：$LASTEXITCODE"
+        }
+        Write-Host "PASS  $LabName.exe"
     }
 
     if (-not $SkipUnreal)

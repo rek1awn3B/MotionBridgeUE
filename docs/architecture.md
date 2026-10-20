@@ -1,8 +1,8 @@
-# Week 1：离线动作链路架构
+# 离线与实时动作链路架构
 
 ## 目标
 
-第一周只建立一条可验证的离线闭环：读取公开 BVH，独立解析并验证动画数学，
+离线链路从一条可验证闭环开始：读取公开 BVH，解析并验证动画数学，
 再通过 Blender 和 UE5 将同一动作重定向到 Manny。实时传输和运行时重定向
 不属于本周实现范围。
 
@@ -12,7 +12,7 @@
 flowchart TD
     BVH[公开 BVH 测试数据]
 
-    BVH --> Parser[自研 tokenizer / parser]
+    BVH --> Parser[tokenizer / parser]
     Parser --> Decode[通道解码与 Euler 顺序组合]
     Decode --> FK[层级 FK]
     FK --> Visualizer[Matplotlib 骨架动画]
@@ -33,7 +33,7 @@ flowchart TD
 
 ## 两条分支的边界
 
-### 自研解析与 FK 分支
+### 解析与 FK 分支
 
 负责：
 
@@ -54,7 +54,7 @@ flowchart TD
 - 使用 UE 内置 IK Retargeter 迁移动作并烘焙目标动画；
 - 在演示关卡中循环播放 Manny AnimSequence。
 
-这条分支使用成熟工具完成资产生产，不等同于自研重定向算法。
+这条分支使用 Blender 与 UE IK Retargeter 完成跨骨架资产生产。
 
 ## 重定向映射
 

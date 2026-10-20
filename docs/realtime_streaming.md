@@ -1,6 +1,6 @@
-# Day 11：UDP 实时姿势接收与播放
+# UDP 实时姿势接收与播放
 
-## 本日目标
+## 目标
 
 将此前只接受函数调用的帧缓冲接到真实 UDP 输入，并让网络帧最终驱动 Manny，
 同时保持无网络数据时原动画和 Foot IK 正常工作。
@@ -60,7 +60,7 @@ Foot IK → Manny
 
 当前输入必须已经是 Manny 的父骨骼空间局部旋转。`root_position` 使用 UE 厘米
 单位。`bone_translations` 可选；缺失时使用 Manny 参考姿势的局部位移。原始
-BVH 到 Manny 的实时重定向不在本日范围内。
+当前实时输入使用已经重定向到 Manny 的局部姿势。
 
 当接收组件的 `bConsumeRootMotionAsActorMovement` 开启时，网络帧中的 root
 不再直接写入 Pose Snapshot。角色每帧计算相邻 root 样本的增量，将它交给

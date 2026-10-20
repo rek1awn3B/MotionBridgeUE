@@ -27,7 +27,7 @@ public:
     void ConfigurePortfolioWalkDemo();
 
     /**
-     * Day 9 的 Root Motion 关卡保持开启；Day 10 的 Foot IK 关卡关闭，
+     * Root Motion 验证关卡保持开启；Foot IK 验证关卡关闭，
      * 让同一段重定向动作原地播放，避免 180 度掉头轨迹干扰脚部观察。
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MotionBridge|Root Motion")
@@ -57,7 +57,7 @@ protected:
     virtual void Tick(float DeltaSeconds) override;
 
     /**
-     * 默认仍指向 Day 9 的回归动画；独立演示关卡可以在 Actor 实例上
+     * 默认仍指向 Root Motion 回归动画；独立演示关卡可以在 Actor 实例上
      * 换成新的公开 BVH 重定向结果，而不影响既有 UDP 自动验收。
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MotionBridge|Root Motion")

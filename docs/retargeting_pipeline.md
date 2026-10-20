@@ -1,4 +1,4 @@
-# Day 6：Blender 转换与 UE 第一次重定向
+# Blender 转换与 UE 动作重定向
 
 ## 数据链路
 

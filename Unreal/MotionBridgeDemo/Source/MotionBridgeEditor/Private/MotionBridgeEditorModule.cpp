@@ -41,10 +41,6 @@ constexpr const TCHAR* HundredStyleBlueprintPath =
     TEXT("/Game/MotionBridge/100Style/ABP_MotionBridge100StyleFootIK.ABP_MotionBridge100StyleFootIK");
 constexpr const TCHAR* HundredStyleAnimationPath =
     TEXT("/Game/MotionBridge/100StyleRetargeted/A_MotionBridge100Style_Manny.A_MotionBridge100Style_Manny");
-constexpr const TCHAR* SFUWalkBlueprintPath =
-    TEXT("/Game/MotionBridge/SFUWalk/ABP_MotionBridgeSFUWalkFootIK.ABP_MotionBridgeSFUWalkFootIK");
-constexpr const TCHAR* SFUWalkAnimationPath =
-    TEXT("/Game/MotionBridge/SFUWalkRetargeted/A_MotionBridgeSFUWalk_Manny.A_MotionBridgeSFUWalk_Manny");
 
 template <typename NodeType>
 NodeType* AddNode(UEdGraph& Graph, const int32 X, const int32 Y)
@@ -421,10 +417,12 @@ void Inspect(const TCHAR* AssetPath)
     }
 
     const float PlayLength = Animation->GetPlayLength();
-    const FTransform RootMotion = Animation->ExtractRootMotion(
-        0.0f,
-        PlayLength,
+    const FAnimExtractContext ExtractionContext(
+        0.0,
+        true,
+        FDeltaTimeRecord(PlayLength),
         false);
+    const FTransform RootMotion = Animation->ExtractRootMotion(ExtractionContext);
     const FVector Translation = RootMotion.GetTranslation();
     const float HorizontalDistance = FVector(
         Translation.X,
@@ -572,10 +570,12 @@ void Rebuild(const TCHAR* AssetPath, const TCHAR* ResultKey)
         UE_LOG(LogTemp, Fatal, TEXT("%s=FAIL|save"), ResultKey);
     }
 
-    const FTransform RootMotion = Animation->ExtractRootMotion(
-        0.0f,
-        Animation->GetPlayLength(),
+    const FAnimExtractContext ExtractionContext(
+        0.0,
+        true,
+        FDeltaTimeRecord(Animation->GetPlayLength()),
         false);
+    const FTransform RootMotion = Animation->ExtractRootMotion(ExtractionContext);
     const USkeleton* Skeleton = Animation->GetSkeleton();
     const FName SkeletonRoot =
         Skeleton && Skeleton->GetReferenceSkeleton().GetNum() > 0
@@ -629,15 +629,6 @@ public:
         }
         if (FParse::Param(
                 FCommandLine::Get(),
-                TEXT("MotionBridgeBuildSFUWalkFootIKGraph")))
-        {
-            MotionBridgeFootIKGraph::Build(
-                MotionBridgeFootIKGraph::SFUWalkBlueprintPath,
-                MotionBridgeFootIKGraph::SFUWalkAnimationPath,
-                TEXT("MOTIONBRIDGE_SFU_WALK_FOOT_IK_GRAPH"));
-        }
-        if (FParse::Param(
-                FCommandLine::Get(),
                 TEXT("MotionBridgeInspectWalkAssets")))
         {
             MotionBridgeWalkInspection::InspectAll();
@@ -649,14 +640,6 @@ public:
             MotionBridgeAnimationCompression::Rebuild(
                 MotionBridgeFootIKGraph::HundredStyleAnimationPath,
                 TEXT("MOTIONBRIDGE_100STYLE_RECOMPRESS"));
-        }
-        if (FParse::Param(
-                FCommandLine::Get(),
-                TEXT("MotionBridgeRecompressSFUWalk")))
-        {
-            MotionBridgeAnimationCompression::Rebuild(
-                MotionBridgeFootIKGraph::SFUWalkAnimationPath,
-                TEXT("MOTIONBRIDGE_SFU_WALK_RECOMPRESS"));
         }
     }
 };

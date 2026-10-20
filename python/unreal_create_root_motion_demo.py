@@ -4,30 +4,27 @@ import unreal
 
 
 IS_100STYLE = "-MotionBridge100Style" in unreal.SystemLibrary.get_command_line()
-IS_SFU_WALK = "-MotionBridgeSFUWalk" in unreal.SystemLibrary.get_command_line()
-IS_GAIT_DEMO = IS_100STYLE or IS_SFU_WALK
+IS_GAIT_DEMO = IS_100STYLE
 FRONT_FOOT_VIEW = (
     "-MotionBridgeFrontFootView" in unreal.SystemLibrary.get_command_line()
 )
 LEVEL_PATH = (
-    "/Game/MotionBridge/Maps/L_MotionBridgeSFUWalkDemo"
-    if IS_SFU_WALK
-    else "/Game/MotionBridge/Maps/L_MotionBridge100StyleDemo"
+    "/Game/MotionBridge/Maps/L_MotionBridge100StyleDemo"
     if IS_100STYLE
     else "/Game/MotionBridge/Maps/L_MotionBridgeRootMotionDemo"
 )
 CHARACTER_CLASS_PATH = "/Script/TP_ThirdPerson.MotionBridgeRootMotionCharacter"
 ANIMATION_PATH = (
-    "/Game/MotionBridge/SFUWalkRetargeted/A_MotionBridgeSFUWalk_Manny"
-    if IS_SFU_WALK
-    else "/Game/MotionBridge/100StyleRetargeted/A_MotionBridge100Style_Manny"
+    "/Game/MotionBridge/100StyleRetargeted/A_MotionBridge100Style_Manny"
+    if IS_100STYLE
+    else "/Game/MotionBridge/RootMotionRetargeted/A_MotionBridgeRootMotion_Manny"
 )
 ANIM_BLUEPRINT_CLASS_PATH = (
-    "/Game/MotionBridge/SFUWalk/"
-    "ABP_MotionBridgeSFUWalkFootIK.ABP_MotionBridgeSFUWalkFootIK_C"
-    if IS_SFU_WALK
-    else "/Game/MotionBridge/100Style/"
+    "/Game/MotionBridge/100Style/"
     "ABP_MotionBridge100StyleFootIK.ABP_MotionBridge100StyleFootIK_C"
+    if IS_100STYLE
+    else "/Game/MotionBridge/FootIK/"
+    "ABP_MotionBridgeFootIK.ABP_MotionBridgeFootIK_C"
 )
 
 
@@ -73,7 +70,6 @@ def main() -> None:
     generated_labels = {
         "MotionBridge_RootMotionCharacter",
         "MotionBridge_100StyleCharacter",
-        "MotionBridge_SFUWalkCharacter",
         "MotionBridge_RootMotionFloor",
         "MotionBridge_RootMotionKeyLight",
         "MotionBridge_RootMotionSkyLight",
@@ -97,23 +93,15 @@ def main() -> None:
 
     character = spawn(
         character_class,
-        unreal.Vector(0.0, 0.0, 91.0 if IS_SFU_WALK else 100.0),
+        unreal.Vector(0.0, 0.0, 100.0),
     )
     unreal.log("MOTIONBRIDGE_DEMO_STAGE=AFTER_SPAWN_CHARACTER")
     character.set_actor_label(
-        "MotionBridge_SFUWalkCharacter"
-        if IS_SFU_WALK
-        else "MotionBridge_100StyleCharacter"
+        "MotionBridge_100StyleCharacter"
         if IS_100STYLE
         else "MotionBridge_RootMotionCharacter"
     )
     if IS_GAIT_DEMO:
-        if IS_SFU_WALK:
-            # SFU 的虚拟 MotionRoot 位于地面，不像旧测试片段那样含有
-            # 一个胶囊半高的垂直偏移；因此恢复 Manny 的标准网格下移。
-            character.get_editor_property("mesh").set_relative_location(
-                unreal.Vector(0.0, 0.0, -96.0)
-            )
         character.set_editor_property(
             "use_constant_speed_root_motion",
             False,
@@ -184,7 +172,7 @@ def main() -> None:
         # 运行时根运动沿世界 +X 前进约 258 cm；把地面中心放到路径
         # 中点，保证角色跨过循环接缝后仍位于地板范围内。
         unreal.Vector(
-            65.0 if IS_SFU_WALK else 130.0 if IS_100STYLE else 45.0,
+            130.0 if IS_100STYLE else 45.0,
             0.0,
             -10.0,
         ),
@@ -218,7 +206,7 @@ def main() -> None:
             if IS_GAIT_DEMO and FRONT_FOOT_VIEW
             else
             # 对准一轮根运动的路径中点，让循环接缝仍完整留在画面中。
-            unreal.Vector(65.0 if IS_SFU_WALK else 130.0, 350.0, 125.0)
+            unreal.Vector(130.0, 350.0, 125.0)
             if IS_GAIT_DEMO
             else unreal.Vector(320.0, 320.0, 165.0)
         ),

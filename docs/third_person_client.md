@@ -1,14 +1,13 @@
-# Day 12：第三人称客户端框架与自动验收
+# 第三人称客户端框架与自动验收
 
 ## 目标
 
-本日补齐第三人称客户端基础，重点不是重新制作 UE 模板，而是理解模板实际运行链路，并建立可重复执行的自动验收：
+本模块覆盖第三人称客户端的运行链路与可重复自动验收：
 
 - Gameplay Framework 的生成与控制关系；
 - Enhanced Input、相机相对移动和角色朝向；
 - Idle/Walk/Run/Jump 动画实例的运行时归属；
-- 独立测试 GameMode 的职责与生命周期；
-- 一道覆盖 C++ 容器和迭代器的 LRU 算法题。
+- 独立测试 GameMode 的职责与生命周期。
 
 ## 正式运行链路
 
@@ -72,22 +71,8 @@ observed_falling=1
 observed_landing=1
 ```
 
-## LRU 缓存练习
-
-实现位于 `src/lru_cache_lab.cpp`：
-
-```text
-std::list<pair<key, value>>
-    维护最近使用到最久未使用的顺序
-
-unordered_map<key, list::iterator>
-    平均 O(1) 定位链表节点
-```
-
-`Get` 和已有键的 `Put` 使用 `list::splice` 将原节点移动到表头；插入超容量时先用尾节点 key 清理哈希表，再删除尾节点。普通读取、顺序刷新、更新、淘汰、容量 1 和容量 0 共 10 项测试通过。
-
 ## 已知边界
 
 - 当前自动测试没有注入真实键盘按键，因此没有端到端覆盖 `IA_Move -> BindAction -> Move()` 的事件路线。
 - 原 `ThirdPersonMap` 缺少部分 `LevelPrototyping` 资源；本测试使用引擎空白地图和临时地面隔离该问题。
-- UMG 状态面板留到下一学习日完成。
+- UMG 状态面板由独立实时监控模块实现。

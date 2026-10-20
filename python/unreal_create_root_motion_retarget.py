@@ -4,19 +4,13 @@ import unreal
 
 
 IS_100STYLE = "-MotionBridge100Style" in unreal.SystemLibrary.get_command_line()
-IS_SFU_WALK = "-MotionBridgeSFUWalk" in unreal.SystemLibrary.get_command_line()
 DISABLE_AUTO_ALIGN = (
     "-MotionBridgeNoAutoAlign" in unreal.SystemLibrary.get_command_line()
 )
 LEG_ONE_TO_ONE = (
     "-MotionBridgeLegOneToOne" in unreal.SystemLibrary.get_command_line()
 )
-if IS_SFU_WALK:
-    RIG_DIRECTORY = "/Game/MotionBridge/SFUWalkRigs"
-    SOURCE_DIRECTORY = "/Game/MotionBridge/SFUWalkSource"
-    SOURCE_MESH_PATH = f"{SOURCE_DIRECTORY}/SK_MotionBridgeSFUWalkSource"
-    SOURCE_ANIMATION_PATH = f"{SOURCE_DIRECTORY}/A_MotionBridgeSFUWalkSource_Anim"
-elif IS_100STYLE:
+if IS_100STYLE:
     RIG_DIRECTORY = "/Game/MotionBridge/100StyleRigs"
     SOURCE_DIRECTORY = "/Game/MotionBridge/100StyleSource"
     SOURCE_MESH_PATH = f"{SOURCE_DIRECTORY}/SK_MotionBridge100StyleSource"
@@ -28,14 +22,7 @@ else:
     SOURCE_ANIMATION_PATH = f"{SOURCE_DIRECTORY}/A_MotionBridgeRootMotionSource_Anim"
 TARGET_MESH_PATH = "/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple"
 
-if IS_SFU_WALK:
-    SOURCE_RIG_PATH = f"{RIG_DIRECTORY}/IK_MotionBridgeSFUWalkSource"
-    TARGET_RIG_PATH = f"{RIG_DIRECTORY}/IK_UE5MannySFUWalk"
-    RETARGETER_PATH = f"{RIG_DIRECTORY}/RTG_MotionBridgeSFUWalkToManny"
-    OUTPUT_ANIMATION_PATH = (
-        "/Game/MotionBridge/SFUWalkRetargeted/A_MotionBridgeSFUWalk_Manny"
-    )
-elif IS_100STYLE:
+if IS_100STYLE:
     SOURCE_RIG_PATH = f"{RIG_DIRECTORY}/IK_MotionBridge100StyleSource"
     TARGET_RIG_PATH = f"{RIG_DIRECTORY}/IK_UE5Manny100Style"
     RETARGETER_PATH = f"{RIG_DIRECTORY}/RTG_MotionBridge100StyleToManny"
@@ -72,19 +59,8 @@ HUNDRED_STYLE_SOURCE_CHAINS = (
     ("RightLeg", "RightHip", "RightToe"),
 )
 
-SFU_SOURCE_CHAINS = (
-    ("Spine", "Spine", "Spine1"),
-    ("Neck", "Neck", "Head"),
-    ("LeftArm", "LeftShoulder", "LeftHand"),
-    ("RightArm", "RightShoulder", "RightHand"),
-    ("LeftLeg", "LeftUpLeg", "LeftToeBase"),
-    ("RightLeg", "RightUpLeg", "RightToeBase"),
-)
-
 SOURCE_CHAINS = (
-    SFU_SOURCE_CHAINS
-    if IS_SFU_WALK
-    else HUNDRED_STYLE_SOURCE_CHAINS
+    HUNDRED_STYLE_SOURCE_CHAINS
     if IS_100STYLE
     else LEGACY_SOURCE_CHAINS
 )
@@ -410,22 +386,13 @@ def main() -> None:
         only_if_is_dirty=False,
     )
 
-    if IS_100STYLE or IS_SFU_WALK:
-        blueprint_directory = (
-            "/Game/MotionBridge/SFUWalk"
-            if IS_SFU_WALK
-            else "/Game/MotionBridge/100Style"
-        )
+    if IS_100STYLE:
+        blueprint_directory = "/Game/MotionBridge/100Style"
         source_blueprint = (
             "/Game/MotionBridge/FootIK/ABP_MotionBridgeFootIK"
         )
         target_blueprint = (
-            f"{blueprint_directory}/"
-            + (
-                "ABP_MotionBridgeSFUWalkFootIK"
-                if IS_SFU_WALK
-                else "ABP_MotionBridge100StyleFootIK"
-            )
+            f"{blueprint_directory}/ABP_MotionBridge100StyleFootIK"
         )
         if unreal.EditorAssetLibrary.does_asset_exist(target_blueprint):
             if not unreal.EditorAssetLibrary.delete_asset(target_blueprint):

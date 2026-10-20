@@ -1,4 +1,4 @@
-# Day 13–15：UMG、WebSocket 与 Morph Target 实时驱动
+# UMG、WebSocket 与 Morph Target 实时驱动
 
 ## 目标
 
@@ -45,7 +45,7 @@ latency = local_unix_seconds - sent_unix_seconds
 
 ## Morph Target 链路
 
-为避免依赖私有或受限角色资产，Blender 脚本生成一个原创简化头像及四个 Shape Key：
+Blender 脚本生成一个最小测试头像及四个 Shape Key：
 
 - `Smile`
 - `JawOpen`
@@ -79,10 +79,10 @@ mapped=4 missing=0 smile=0.998 jaw_open=0.496
 blink_left=0.926 blink_right=0.926
 ```
 
-最终可视化证据：`artifacts/candidates/MotionBridge_RealtimeFacial.png`。
+最终可视化证据：`artifacts/MotionBridge_RealtimeFacial.png`。
 
 ## 边界
 
-- 当前 Morph 值由确定性测试波形产生，不是语音模型或视频面捕模型的输出。
+- 当前 Morph 值由确定性测试波形产生，接口接收上游标量通道输入。
 - 当前只驱动四个通道，重点是证明传输、线程交接、映射、平滑、监控与恢复链路。
 - 若接入语音驱动数字人，模型服务只需输出同一协议的标量通道；UE 侧架构不需要重写。

@@ -5,27 +5,14 @@ import math
 import unreal
 
 
-IS_SFU_WALK = "-MotionBridgeSFUWalk" in unreal.SystemLibrary.get_command_line()
-DIRECTORY = (
-    "/Game/MotionBridge/SFUWalkSource"
-    if IS_SFU_WALK
-    else "/Game/MotionBridge/RootMotionSource"
-)
-MESH_PATH = (
-    f"{DIRECTORY}/SK_MotionBridgeSFUWalkSource"
-    if IS_SFU_WALK
-    else f"{DIRECTORY}/SK_MotionBridgeRootMotionSource"
-)
-ANIMATION_PATH = (
-    f"{DIRECTORY}/A_MotionBridgeSFUWalkSource_Anim"
-    if IS_SFU_WALK
-    else f"{DIRECTORY}/A_MotionBridgeRootMotionSource_Anim"
-)
-EXPECTED_SAMPLES = 120 if IS_SFU_WALK else 69
-MIN_HEIGHT = 145.0 if IS_SFU_WALK else 150.0
-MAX_HEIGHT = 175.0 if IS_SFU_WALK else 220.0
-MIN_ROOT_HORIZONTAL = 125.0 if IS_SFU_WALK else 90.0
-MAX_ROOT_HORIZONTAL = 138.0 if IS_SFU_WALK else 100.0
+DIRECTORY = "/Game/MotionBridge/RootMotionSource"
+MESH_PATH = f"{DIRECTORY}/SK_MotionBridgeRootMotionSource"
+ANIMATION_PATH = f"{DIRECTORY}/A_MotionBridgeRootMotionSource_Anim"
+EXPECTED_SAMPLES = 69
+MIN_HEIGHT = 150.0
+MAX_HEIGHT = 220.0
+MIN_ROOT_HORIZONTAL = 90.0
+MAX_ROOT_HORIZONTAL = 100.0
 
 
 def axis_range(

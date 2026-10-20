@@ -6,21 +6,16 @@ import unreal
 
 
 IS_100STYLE = "-MotionBridge100Style" in unreal.SystemLibrary.get_command_line()
-IS_SFU_WALK = "-MotionBridgeSFUWalk" in unreal.SystemLibrary.get_command_line()
 ANIMATION_PATH = (
-    "/Game/MotionBridge/SFUWalkRetargeted/A_MotionBridgeSFUWalk_Manny"
-    if IS_SFU_WALK
-    else "/Game/MotionBridge/100StyleRetargeted/A_MotionBridge100Style_Manny"
+    "/Game/MotionBridge/100StyleRetargeted/A_MotionBridge100Style_Manny"
     if IS_100STYLE
     else "/Game/MotionBridge/RootMotionRetargeted/"
     "A_MotionBridgeRootMotion_Manny"
 )
 MESH_PATH = "/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple"
-EXPECTED_SAMPLES = 120 if IS_SFU_WALK else 165 if IS_100STYLE else 69
-# UE 的 Pelvis Motion 阶段会按 Manny 与源骨架的高度比例缩放步幅，
-# 所以 SFU 源数据的 131 cm 会在目标骨架上变为约 157 cm。
-MIN_ROOT_HORIZONTAL = 150.0 if IS_SFU_WALK else 200.0 if IS_100STYLE else 85.0
-MAX_ROOT_HORIZONTAL = 165.0 if IS_SFU_WALK else 300.0 if IS_100STYLE else 105.0
+EXPECTED_SAMPLES = 165 if IS_100STYLE else 69
+MIN_ROOT_HORIZONTAL = 200.0 if IS_100STYLE else 85.0
+MAX_ROOT_HORIZONTAL = 300.0 if IS_100STYLE else 105.0
 
 
 def axis_extent(
@@ -143,7 +138,7 @@ def main() -> None:
             "Manny root did not retain the expected trajectory: "
             f"horizontal extent={root_horizontal}"
         )
-    if (IS_100STYLE or IS_SFU_WALK) and root_net_horizontal < MIN_ROOT_HORIZONTAL:
+    if IS_100STYLE and root_net_horizontal < MIN_ROOT_HORIZONTAL:
         raise RuntimeError(
             "Manny root did not preserve forward displacement: "
             f"net horizontal={root_net_horizontal}"

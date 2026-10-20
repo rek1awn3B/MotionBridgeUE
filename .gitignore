@@ -20,19 +20,16 @@ Unreal/MotionBridgeDemo/Saved/
 Unreal/MotionBridgeDemo/Binaries/
 Unreal/MotionBridgeDemo/.vs/
 
-# 本地迭代产物很多，只保留求职展示所需的精选证据。
+# 本地迭代产物很多，只保留 README 与验收文档引用的证据。
 artifacts/**
-!artifacts/bvh_animation.gif
 !artifacts/bvh_animation.mp4
 !artifacts/fk_static_skeleton.png
 !artifacts/ue_manny_retarget.mp4
 !artifacts/ue_manny_retarget_contact.png
-!artifacts/candidates/
-artifacts/candidates/**
-!artifacts/candidates/MotionBridge_RealtimeFacial.png
+!artifacts/MotionBridge_RealtimeFacial.png
 !artifacts/realtime/
 artifacts/realtime/**
 !artifacts/realtime/manny_root_motion_stream.json
 
-# SFU Mocap 仅允许研究用途；本地成果保留，但不进入公开仓库。
+# 本地专用素材不进入公开仓库。
 local_assets/

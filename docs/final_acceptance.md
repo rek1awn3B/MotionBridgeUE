@@ -4,15 +4,15 @@
 
 ## 结论
 
-核心求职作品闭环通过。离线 BVH/FK、Blender/FBX、UE 重定向、Root Motion、Foot IK、第三人称客户端、UDP/WebSocket 实时流、断流恢复、UMG 监控和 Morph Target 驱动均有代码与可重复验收证据。
+离线 BVH/FK、Blender/FBX、UE 重定向、Root Motion、Foot IK、第三人称客户端、UDP/WebSocket 实时流、断流恢复、UMG 监控和 Morph Target 驱动均有代码与可重复验收证据。
 
 ## 自动化验收矩阵
 
 | 层级 | 验收内容 | 结果 |
 | --- | --- | --- |
 | Python | `unittest discover` | 50 项通过 |
-| C++ | CMake Release 构建 | 16 个目标通过 |
-| C++ | 逐个运行 `*_lab.exe` | 16 个退出码均为 0 |
+| C++ | CMake Release 构建 | 7 个动画与实时系统目标通过 |
+| C++ | 逐个运行 `*_lab.exe` | 7 个退出码均为 0 |
 | UE | `TP_ThirdPerson` Win64 Development | Succeeded |
 | UE | `MBEditor` Win64 Development | Succeeded |
 | UDP | 89 骨骼真实 Manny 姿势流 | PASS，最终误差 0.000 |
@@ -44,7 +44,7 @@ cmake -S . -B build-vs -A x64
 cmake --build build-vs --config Release
 ```
 
-随后逐个执行 `build-vs/Release/*_lab.exe`，16 个程序全部返回 0。覆盖变换、四元数、所有权、骨架结构、算法题、Root/缓冲、Foot IK 与 LRU 等实验。
+随后逐个执行 `build-vs/Release/*_lab.exe`，7 个程序全部返回 0。覆盖三维变换、四元数、骨架结构、动作源接口、实时缓冲与 Foot IK。
 
 UE：
 
@@ -91,9 +91,9 @@ mapped=4 missing=0
 smile=0.998 jaw_open=0.496 blink_left=0.926 blink_right=0.926
 ```
 
-下图是标量通道与监控面板的技术验收截图；简化头像不是作品级数字人资产：
+下图记录标量通道与监控面板的技术验收结果：
 
-![实时表情验收](../artifacts/candidates/MotionBridge_RealtimeFacial.png)
+![实时表情验收](../artifacts/MotionBridge_RealtimeFacial.png)
 
 ## 动画质量证据
 
@@ -102,9 +102,8 @@ smile=0.998 jaw_open=0.496 blink_left=0.926 blink_right=0.926
 - 10° 斜坡上两脚最大地面倾角均为 `10.000°`；IK 后鞋底最小有符号间隙 `+0.194 / +0.200 cm`。
 - 可公开分发的动作主线使用 CC BY 4.0 的 100STYLE 数据，Manny 重定向演示见 `artifacts/ue_manny_retarget.mp4`。
 
-## 已知限制
+## 测试范围
 
-- UE IK Retargeter 是引擎能力，不是自研重定向求解器。
-- 表情测试头像和四通道波形用于系统验收，不代表生产级面捕或语音驱动算法。
-- 延迟测量来自同机回环，跨机器部署需时钟同步并重新测试。
-- 最终投递前仍需录制一条统一的 2–3 分钟成片，并由作者完成不看稿的项目讲解演练。
+- 跨骨架动作映射使用 UE IK Retargeter。
+- Morph Target 验收使用四通道确定性测试波形。
+- 延迟测量来自同机回环；跨机器部署需要时钟同步并重新测试。

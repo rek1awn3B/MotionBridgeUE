@@ -171,7 +171,7 @@ def main() -> None:
         "--global-scale",
         type=float,
         default=BVH_CENTIMETERS_TO_METERS,
-        help="BVH numeric units to Blender metres (SFU inch data uses 0.0254)",
+        help="BVH numeric units to Blender metres (inch-based data uses 0.0254)",
     )
     if "--" not in sys.argv:
         raise RuntimeError("pass script arguments after Blender's -- separator")

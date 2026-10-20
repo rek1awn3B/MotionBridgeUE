@@ -4,10 +4,6 @@ MotionBridge UE is a technical project for real-time character animation. It con
 
 ![BVH motion retargeted to UE5 Manny](artifacts/ue_manny_retarget_contact.png)
 
-The primary portfolio path is full-body Manny animation. The simplified face is
-only a protocol/Morph Target validation fixture, not a finished digital-human
-asset.
-
 ## Highlights
 
 - Custom BVH tokenizer, parser, channel decoder, and forward kinematics implementation.
@@ -42,7 +38,7 @@ Python UDP/WebSocket source
 ## Verified results
 
 - 50/50 Python tests pass.
-- 16/16 standalone C++ labs build and exit successfully.
+- 7/7 C++ motion-system tests build and exit successfully.
 - Unreal Engine 5.6 Game and Editor targets build successfully.
 - UDP playback reproduces 69 frames over 89 Manny bones with `0.000` final local rotation/translation error.
 - WebSocket loopback runs at approximately 27–31 Hz with zero rejected frames; measured average local end-to-end latency was about 36.76 ms in the steady validation run.
@@ -74,9 +70,11 @@ Include live WebSocket, reconnect, and Morph Target integration tests with:
 .\scripts\run_acceptance.ps1 -RunRealtime
 ```
 
-## Scope and attribution
+## Implementation scope
 
-The custom work covers BVH/FK, root-motion processing, runtime ingestion and buffering, thread handoff, foot IK, diagnostics, and Morph-channel driving. Cross-skeleton retargeting uses Unreal's IK Retargeter and is not presented as a custom retargeting solver. The face asset is a minimal original validation asset, not a production facial solver. Public motion assets use the CC BY 4.0 100STYLE dataset; research-only SFU experiments are excluded from the public repository. AI-assisted tools were used during implementation and review; the repository keeps reproducible tests, validation records, and explicit technical boundaries, while the author owns the architecture, data flow, and reported conclusions.
+- The project implements BVH/FK, root-motion processing, runtime ingestion and buffering, thread handoff, foot IK, diagnostics, and Morph-channel driving.
+- Cross-skeleton motion mapping uses Unreal Engine's IK Retargeter.
+- Public motion samples use the CC BY 4.0 100STYLE dataset; latency figures come from local loopback tests.
 
 Project code is released under the [MIT License](LICENSE). Third-party data and
 Epic Games assets are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

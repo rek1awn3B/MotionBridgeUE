@@ -50,7 +50,7 @@ void AMotionBridgeNaturalWalkCharacter::BeginPlay()
 
     if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
     {
-        // 父类的 Day 9 路径采用显式提取；自然步态改回 UE 标准流程，让
+        // 基础 Root Motion 路径采用显式提取；自然步态改回 UE 标准流程，让
         // CharacterMovement 消费 AnimGraph 当前帧产生的 Root Motion。
         AnimInstance->SetRootMotionMode(ERootMotionMode::RootMotionFromEverything);
     }

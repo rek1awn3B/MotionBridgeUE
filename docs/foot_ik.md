@@ -1,4 +1,4 @@
-# Day 10：运行时 Foot IK
+# 运行时 Foot IK
 
 ## 今天解决的问题
 
@@ -26,7 +26,7 @@ AnimGraph 在 Two Bone IK 之前用两个 `Observe Bone` 缓存原动画脚位�
 骨骼修改始终留在 AnimGraph 中，避免网络线程或普通组件直接修改动画姿势。
 
 当前 BVH 动作的根轨迹会在约 2.3 秒内走出约 94 cm，并连续掉头约 185° 后返回；
-它适合 Day 9 验证 Root Motion，却会让 Day 10 的固定相机难以观察脚部。两个 Foot IK
+它适合验证 Root Motion，却会让固定相机难以观察脚部。两个 Foot IK
 测试关卡因此使用同一重定向动画的原地模式：AnimInstance 仍正确移除根轨迹，角色
 Actor 不再消费该轨迹；Root Motion 专用关卡继续保留真实位移和转向。
 

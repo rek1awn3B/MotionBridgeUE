@@ -6,12 +6,7 @@ import unreal
 
 
 IS_100STYLE = "-MotionBridge100Style" in unreal.SystemLibrary.get_command_line()
-IS_SFU_WALK = "-MotionBridgeSFUWalk" in unreal.SystemLibrary.get_command_line()
-if IS_SFU_WALK:
-    DESTINATION = "/Game/MotionBridge/SFUWalkSource"
-    MESH_NAME = "SK_MotionBridgeSFUWalkSource"
-    ANIMATION_NAME = "A_MotionBridgeSFUWalkSource"
-elif IS_100STYLE:
+if IS_100STYLE:
     DESTINATION = "/Game/MotionBridge/100StyleSource"
     MESH_NAME = "SK_MotionBridge100StyleSource"
     ANIMATION_NAME = "A_MotionBridge100StyleSource"
@@ -28,14 +23,7 @@ UE_FBX_ANIMATION_IMPORT_SCALE = 0.01
 def main() -> None:
     project_directory = Path(unreal.Paths.project_dir()).resolve()
     repository_directory = project_directory.parents[1]
-    if IS_SFU_WALK:
-        source_fbx = (
-            repository_directory
-            / "artifacts"
-            / "candidates"
-            / "SFU_0005_Walking001_frames_3656_3775_straight_root.fbx"
-        )
-    elif IS_100STYLE:
+    if IS_100STYLE:
         source_fbx = (
             repository_directory
             / "artifacts"

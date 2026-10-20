@@ -20,13 +20,9 @@ for the public MotionBridge demo.
 - Original file: `Neutral_FW.bvh`
 - Included frame ranges: 507–687, 530–694, and 2093–2176, inclusive
 - Capture rate: 60 FPS
-- License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+- License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Attribution: The 100STYLE Dataset - Ian Mason
 
 The excerpt keeps the source skeleton, channel order, and motion samples
 unchanged. MotionBridge adds its own virtual root only in generated build
 artifacts.
-
-The research-only SFU motion previously used during local iteration is not
-distributed. See `THIRD_PARTY_NOTICES.md` for the archive policy and source
-terms.
