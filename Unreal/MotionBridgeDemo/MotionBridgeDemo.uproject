@@ -1,0 +1,38 @@
+{
+    "FileVersion": 3,
+    "EngineAssociation": "5.6",
+    "Category": "Games",
+    "Description": "MotionBridge BVH import, retargeting, and realtime motion demo.",
+    "Modules": [
+        {
+            "Name": "TP_ThirdPerson",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        },
+        {
+            "Name": "MotionBridgeEditor",
+            "Type": "Editor",
+            "LoadingPhase": "PostEngineInit"
+        }
+    ],
+    "Plugins": [
+        {
+            "Name": "ModelingToolsEditorMode",
+            "Enabled": true,
+            "TargetAllowList": [
+                "Editor"
+            ]
+        },
+        {
+            "Name": "IKRig",
+            "Enabled": true
+        },
+        {
+            "Name": "PythonScriptPlugin",
+            "Enabled": true,
+            "TargetAllowList": [
+                "Editor"
+            ]
+        }
+    ]
+}
