@@ -1,13 +1,12 @@
 # MotionBridge UE
 
-面向动捕动画、AI 虚拟人系统与游戏客户端岗位的公开求职项目。项目覆盖从 BVH 数据理解、离线重定向、Root Motion 与 Foot IK，到 Python → Unreal 的 UDP/WebSocket 实时驱动、断线重连、UMG 监控和 Morph Target 表情驱动。
+MotionBridge UE 是一个面向实时角色动画的技术项目，覆盖从 BVH 数据解析、离线重定向、Root Motion 与 Foot IK，到 Python → Unreal 的 UDP/WebSocket 实时驱动、断线重连、UMG 监控和 Morph Target 表情驱动。
 
 > 当前状态：核心作品闭环已完成。开发与最终验证环境为 Unreal Engine 5.6、Visual Studio 2022、Python 3.12。
 
 ![BVH 动作重定向到 UE5 Manny](artifacts/ue_manny_retarget_contact.png)
 
-项目主线是 Manny 全身动作的解析、重定向与实时驱动。简化头像仅用于验证
-标量通道到 Morph Target 的接口，不作为数字人美术成品或项目封面。
+项目主线是 UE5 Manny 全身动作的解析、重定向与实时驱动。
 
 English documentation: [README_EN.md](README_EN.md)
 

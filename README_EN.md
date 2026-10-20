@@ -1,6 +1,6 @@
 # MotionBridge UE
 
-MotionBridge UE is a portfolio project for motion-capture animation, AI virtual-human systems, and gameplay/client engineering roles. It connects offline BVH processing and Unreal retargeting with runtime UDP/WebSocket streaming, root motion, foot IK, monitoring, reconnection, and Morph Target facial control.
+MotionBridge UE is a technical project for real-time character animation. It connects offline BVH processing and Unreal retargeting with runtime UDP/WebSocket streaming, root motion, foot IK, monitoring, reconnection, and Morph Target facial control.
 
 ![BVH motion retargeted to UE5 Manny](artifacts/ue_manny_retarget_contact.png)
 
