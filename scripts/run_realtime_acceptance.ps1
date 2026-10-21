@@ -8,6 +8,9 @@ $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ProjectDirectory = (Resolve-Path (
     Join-Path $RepositoryRoot "Unreal\MotionBridgeDemo"
 )).Path
+$ProjectFile = (Resolve-Path (
+    Join-Path $ProjectDirectory "MotionBridgeDemo.uproject"
+)).Path
 $StreamPath = Join-Path $RepositoryRoot `
     "artifacts\realtime\manny_root_motion_stream.json"
 $OutputDirectory = Join-Path $RepositoryRoot "artifacts\runtime_acceptance"
@@ -73,7 +76,7 @@ function Invoke-RealtimeCase
         }
 
         $EditorArguments = @(
-            "MotionBridgeDemo.uproject",
+            $ProjectFile,
             "/Game/MotionBridge/Maps/L_MotionBridge100StyleDemo",
             "-game",
             "-nullrhi",

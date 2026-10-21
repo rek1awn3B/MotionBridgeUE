@@ -27,6 +27,10 @@ artifacts/**
 !artifacts/ue_manny_retarget.mp4
 !artifacts/ue_manny_retarget_contact.png
 !artifacts/MotionBridge_RealtimeFacial.png
+!artifacts/candidates/
+artifacts/candidates/**
+!artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4
+!artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png
 !artifacts/realtime/
 artifacts/realtime/**
 !artifacts/realtime/manny_root_motion_stream.json

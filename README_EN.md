@@ -4,6 +4,10 @@ MotionBridge UE is a technical project for real-time character animation. It con
 
 ![BVH motion retargeted to UE5 Manny](artifacts/ue_manny_retarget_contact.png)
 
+[![WebSocket-driven UE5 Manny](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png)](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)
+
+Click the image to view an actual runtime capture. Python streams an 89-bone pose at approximately 60 Hz, while Unreal handles WebSocket ingestion, buffering, interpolation, Pose Snapshot application, root motion, and foot IK. The visible jump at the end is the boundary of the finite looping motion clip, not a disconnect or packet-loss event.
+
 ## Highlights
 
 - Custom BVH tokenizer, parser, channel decoder, and forward kinematics implementation.
@@ -41,8 +45,8 @@ Python UDP/WebSocket source
 - 7/7 C++ motion-system tests build and exit successfully.
 - Unreal Engine 5.6 Game and Editor targets build successfully.
 - UDP playback reproduces 69 frames over 89 Manny bones with `0.000` final local rotation/translation error.
-- WebSocket loopback runs at approximately 27–31 Hz with zero rejected frames; measured average local end-to-end latency was about 36.76 ms in the steady validation run.
-- Forced server disconnects were recovered automatically twice while streaming continued.
+- WebSocket loopback runs at `59.99 Hz` over 89 bones with zero rejected frames; the pose reached Manny with `0.000°` measured spine error.
+- Forced server disconnects were recovered automatically three times while the 89-bone pose stream resumed.
 - Four Morph Targets were mapped and driven with zero missing channels.
 - On a 10-degree slope, both feet matched `10.000°`; minimum sole clearances were `+0.194 / +0.200 cm`.
 

@@ -112,6 +112,21 @@ void AMotionBridgeDemoGameMode::BeginPlay()
         return;
     }
 
+    // 演示关卡本身可能保存过一个预览角色。运行时验收需要唯一的数据接收者，
+    // 否则两个 WebSocket 客户端会各自回放一份流，统计与画面都会重复。
+    TArray<AActor*> ExistingCharacters;
+    UGameplayStatics::GetAllActorsOfClass(
+        World,
+        AMotionBridgeRootMotionCharacter::StaticClass(),
+        ExistingCharacters);
+    for (AActor* ExistingCharacter : ExistingCharacters)
+    {
+        if (IsValid(ExistingCharacter))
+        {
+            ExistingCharacter->Destroy();
+        }
+    }
+
     const FTransform CharacterTransform(
         FRotator::ZeroRotator,
         FVector(0.0f, 0.0f, 91.0f));
@@ -163,8 +178,11 @@ void AMotionBridgeDemoGameMode::BeginPlay()
             Camera->AttachToActor(
                 Character,
                 FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-            Camera->SetActorRelativeLocation(FVector(450.0f, 0.0f, 80.0f));
-            Camera->SetActorRelativeRotation(FRotator(-10.0f, 180.0f, 0.0f));
+            // Manny 的骨盆在该重定向流中相对 root 沿局部 Y 偏移约 259 cm；
+            // 网格再绕 Actor 旋转 -90° 后，这个偏移落到世界 X。相机同步
+            // 补偿该偏移，才能让可见身体（而不是胶囊原点）处在画面中央。
+            Camera->SetActorRelativeLocation(FVector(-260.0f, -450.0f, 80.0f));
+            Camera->SetActorRelativeRotation(FRotator(-10.0f, 90.0f, 0.0f));
         }
         if (APlayerController* PlayerController =
                 World->GetFirstPlayerController())

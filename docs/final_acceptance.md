@@ -1,6 +1,6 @@
 # MotionBridge UE 最终验收报告
 
-验收日期：2026-10-20（Asia/Shanghai）
+验收日期：2026-10-22（Asia/Shanghai）
 
 ## 结论
 
@@ -17,8 +17,8 @@
 | UE | `MBEditor` Win64 Development | Succeeded |
 | UDP | 89 骨骼真实 Manny 姿势流 | PASS，最终误差 0.000 |
 | UDP | 停发 0.8 秒后重启流 | PASS，首帧位移 0.000 cm |
-| WebSocket | 稳态输入 | PASS，拒绝 0 |
-| WebSocket | 每 50 帧强制断线 | PASS，自动重连 2 次 |
+| WebSocket | 60 FPS、89 骨骼实时姿态 | PASS，快照已应用到 Manny，脊柱误差 0.000° |
+| WebSocket | 每 50 帧强制断线 | PASS，自动重连 3 次并恢复实时姿态 |
 | Morph | 四通道实时驱动 | PASS，映射 4、缺失 0 |
 | 客户端 | 移动、跳跃、落地、相机、AnimInstance | PASS |
 
@@ -68,10 +68,11 @@ WebSocket、重连和 Morph Target 端到端回归统一由以下脚本启动真
 
 ```text
 MOTIONBRIDGE_WEBSOCKET_TEST=PASS
-messages=72 rejected=0 accepted=71
-input_hz=26.99 game_fps=1794.11
-latency_latest_ms=14.92 latency_average_ms=36.76 latency_max_ms=170.24
-latency_samples=71 reconnects=0 connected=1
+messages=171 rejected=0 accepted=170
+input_hz=59.99 game_fps=1139.85
+latency_latest_ms=5.80 latency_average_ms=52.54 latency_max_ms=397.90
+latency_samples=170 reconnects=0 connected=1
+pose_applied=1 snapshot_bones=89 spine_error_deg=0.000
 ```
 
 ### WebSocket 重连
@@ -80,7 +81,8 @@ latency_samples=71 reconnects=0 connected=1
 
 ```text
 MOTIONBRIDGE_WEBSOCKET_RECONNECT_TEST=PASS
-messages=102 rejected=0 accepted=50 reconnects=2 connected=1
+messages=199 rejected=0 accepted=45 reconnects=3 connected=1
+pose_applied=1 snapshot_bones=89 spine_error_deg=0.000
 ```
 
 ### Morph Target
@@ -88,7 +90,7 @@ messages=102 rejected=0 accepted=50 reconnects=2 connected=1
 ```text
 MOTIONBRIDGE_MORPH_TARGET_TEST=PASS
 mapped=4 missing=0
-smile=0.998 jaw_open=0.496 blink_left=0.926 blink_right=0.926
+smile=0.997 jaw_open=0.497 blink_left=0.936 blink_right=0.936
 ```
 
 下图记录标量通道与监控面板的技术验收结果：
@@ -97,6 +99,7 @@ smile=0.998 jaw_open=0.496 blink_left=0.926 blink_right=0.926
 
 ## 动画质量证据
 
+- [WebSocket 实时驱动 Manny 最终录像](../artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)：状态面板显示约 60 Hz 输入、89 骨骼姿态已应用，拒绝/丢帧/乱序均为 0。录像结尾的瞬间回退是有限动作片段的循环边界。
 - Root Motion 输入水平跨度 `91.866 cm`，Actor/胶囊峰值移动 `91.736 cm`。
 - 平地自然步态完整周期约前进 `660 cm`，左右支撑脚最大漂移约 `2.665 / 2.762 cm`。
 - 10° 斜坡上两脚最大地面倾角均为 `10.000°`；IK 后鞋底最小有符号间隙 `+0.194 / +0.200 cm`。

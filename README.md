@@ -4,6 +4,10 @@ MotionBridge UE 是一个实时角色动画系统，覆盖 BVH 数据解析、UE
 
 ![BVH 动作重定向到 UE5 Manny](artifacts/ue_manny_retarget_contact.png)
 
+[![WebSocket 实时驱动 UE5 Manny](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png)](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)
+
+上图可点击播放实际运行录像：Python 以约 60 Hz 发送 89 骨骼姿态，UE 完成 WebSocket 接收、缓冲、插值、Pose Snapshot、Root Motion 与 Foot IK。录像结尾的瞬间回退来自有限动作片段循环，并非网络断线或丢帧。
+
 English documentation: [README_EN.md](README_EN.md)
 
 ## 项目亮点
@@ -49,8 +53,8 @@ Python UDP / WebSocket Server
 | UE 5.6 Game / Editor Target | 编译通过 |
 | UDP 完整 Manny 姿势流 | 89 骨骼、69 帧，旋转/位移误差均为 `0.000` |
 | UDP 断流恢复 | 观察到在线→超时→恢复；重连首帧位移 `0.000 cm` |
-| WebSocket 稳态 | 约 `27–31 Hz`；拒绝帧 0；本机平均端到端延迟约 `36.76 ms` |
-| WebSocket 自动重连 | 服务端每 50 帧主动断开，UE 完成 2 次重连并继续接收 |
+| WebSocket 实时姿态 | `59.99 Hz`、89 骨骼；姿态快照已应用到 Manny，脊柱误差 `0.000°` |
+| WebSocket 自动重连 | 服务端每 50 帧主动断开，UE 完成 3 次重连并恢复 89 骨骼姿态 |
 | Morph Target | 4/4 通道映射，缺失 0，自动验收 PASS |
 | Root Motion | 输入水平跨度 `91.866 cm`；Actor/胶囊实测 `91.736 cm` |
 | 10° 斜坡 Foot IK | 双脚倾角 `10.000°`；鞋底最小间隙 `+0.194 / +0.200 cm` |
@@ -130,6 +134,8 @@ py -3.12 tools\motionbridge_websocket_server.py --facial-demo
 
 ## 演示素材
 
+- [WebSocket 实时驱动 Manny（最终录像）](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)
+- [WebSocket 实时驱动截图](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png)
 - [Manny 重定向视频](artifacts/ue_manny_retarget.mp4)
 - [Manny 重定向接触图](artifacts/ue_manny_retarget_contact.png)
 - [实时表情与监控截图](artifacts/MotionBridge_RealtimeFacial.png)

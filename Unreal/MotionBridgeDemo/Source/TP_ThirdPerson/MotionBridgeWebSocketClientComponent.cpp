@@ -1,7 +1,11 @@
 #include "MotionBridgeWebSocketClientComponent.h"
 
+#include "MotionBridgeFootIKAnimInstance.h"
 #include "MotionBridgeReceiverComponent.h"
 
+#include "Animation/PoseSnapshot.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/Character.h"
 #include "IWebSocket.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
@@ -317,6 +321,44 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
 
     FMotionBridgeStreamStats Stats;
     ReceiverComponent->GetStreamStats(Stats);
+
+    const ACharacter* CharacterOwner = Cast<ACharacter>(GetOwner());
+    const USkeletalMeshComponent* Mesh = CharacterOwner
+        ? CharacterOwner->GetMesh()
+        : nullptr;
+    const UMotionBridgeFootIKAnimInstance* MotionAnimInstance = Mesh
+        ? Cast<UMotionBridgeFootIKAnimInstance>(Mesh->GetAnimInstance())
+        : nullptr;
+    const FPoseSnapshot* Snapshot = MotionAnimInstance
+        ? &MotionAnimInstance->GetRealtimePoseSnapshot()
+        : nullptr;
+    const int32 SnapshotBoneCount = Snapshot
+        ? Snapshot->BoneNames.Num()
+        : 0;
+    float SpineErrorDegrees = BIG_NUMBER;
+    if (Mesh && Snapshot && Snapshot->bIsValid &&
+        Snapshot->BoneNames.Num() == Snapshot->LocalTransforms.Num())
+    {
+        const int32 SpineIndex = Snapshot->BoneNames.IndexOfByKey(
+            FName(TEXT("spine_01")));
+        if (Snapshot->LocalTransforms.IsValidIndex(SpineIndex))
+        {
+            const FQuat ActualSpine = Mesh->GetBoneTransform(
+                FName(TEXT("spine_01")),
+                RTS_ParentBoneSpace).GetRotation().GetNormalized();
+            const FQuat ExpectedSpine =
+                Snapshot->LocalTransforms[SpineIndex].GetRotation().GetNormalized();
+            SpineErrorDegrees = FMath::RadiansToDegrees(
+                ActualSpine.AngularDistance(ExpectedSpine));
+        }
+    }
+    const bool bRealtimePoseApplied =
+        MotionAnimInstance &&
+        MotionAnimInstance->IsRealtimePoseValid() &&
+        Snapshot &&
+        Snapshot->bIsValid &&
+        SnapshotBoneCount >= 80 &&
+        SpineErrorDegrees <= 0.5f;
     if (bRunWebSocketReconnectTest &&
         (Stats.WebSocketReconnectAttempts < 2 ||
          !Stats.bWebSocketConnected ||
@@ -331,9 +373,10 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
         Stats.AcceptedFrames >= 30 &&
         Stats.EndToEndLatencySamples >= 30 &&
         Stats.IncomingFrameRateHz >= 20.0 &&
-        Stats.IncomingFrameRateHz <= 40.0 &&
+        Stats.IncomingFrameRateHz <= 75.0 &&
         Stats.GameThreadFps > 1.0 &&
-        Stats.AverageEndToEndLatencyMs < 500.0;
+        Stats.AverageEndToEndLatencyMs < 500.0 &&
+        bRealtimePoseApplied;
     const bool bReconnectPassed =
         Stats.bWebSocketConnected &&
         Stats.ReceivedWebSocketMessages >= 100 &&
@@ -341,7 +384,8 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
         Stats.AcceptedFrames >= 15 &&
         Stats.EndToEndLatencySamples >= 15 &&
         Stats.AverageEndToEndLatencyMs < 500.0 &&
-        Stats.WebSocketReconnectAttempts >= 2;
+        Stats.WebSocketReconnectAttempts >= 2 &&
+        bRealtimePoseApplied;
     const bool bPassed = bRunWebSocketReconnectTest
         ? bReconnectPassed
         : bBasePassed;
@@ -349,7 +393,7 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("MOTIONBRIDGE_%s=%s|messages=%lld|rejected=%lld|accepted=%lld|input_hz=%.2f|game_fps=%.2f|latency_latest_ms=%.2f|latency_average_ms=%.2f|latency_max_ms=%.2f|latency_samples=%lld|reconnects=%lld|connected=%d"),
+        TEXT("MOTIONBRIDGE_%s=%s|messages=%lld|rejected=%lld|accepted=%lld|input_hz=%.2f|game_fps=%.2f|latency_latest_ms=%.2f|latency_average_ms=%.2f|latency_max_ms=%.2f|latency_samples=%lld|reconnects=%lld|connected=%d|pose_applied=%d|snapshot_bones=%d|spine_error_deg=%.3f"),
         bRunWebSocketReconnectTest
             ? TEXT("WEBSOCKET_RECONNECT_TEST")
             : TEXT("WEBSOCKET_TEST"),
@@ -364,7 +408,10 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
         Stats.MaxEndToEndLatencyMs,
         Stats.EndToEndLatencySamples,
         Stats.WebSocketReconnectAttempts,
-        Stats.bWebSocketConnected);
+        Stats.bWebSocketConnected,
+        bRealtimePoseApplied,
+        SnapshotBoneCount,
+        SpineErrorDegrees);
     GLog->FlushThreadedLogs();
     if (FParse::Param(
             FCommandLine::Get(),

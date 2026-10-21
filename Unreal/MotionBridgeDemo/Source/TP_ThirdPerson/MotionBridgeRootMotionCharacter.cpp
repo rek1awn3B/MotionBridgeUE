@@ -89,6 +89,14 @@ void AMotionBridgeRootMotionCharacter::ConfigurePortfolioWalkDemo()
     ConstantSpeedRootMotionBlend = 0.0f;
     ConstantDirectionRootMotionBlend = 0.0f;
 
+    // 实时流携带的是带根位移的完整姿势。演示时由角色 Actor 消费根运动，
+    // AnimInstance 同时从姿势快照中剥离 root 位移，避免网格在胶囊内再次前进；
+    // 相机跟随 Actor 后，角色会稳定保持在侧视画面中央。
+    if (ReceiverComponent)
+    {
+        ReceiverComponent->bConsumeRootMotionAsActorMovement = true;
+    }
+
     // 重定向后的 Manny 姿势以骨盆附近为网格原点，脚踝轨道本身已经在
     // 原点下方约 84 cm。角色出生点又位于胶囊中心，因此这里不能再套用
     // 模板蓝图的 -96 cm 网格偏移，否则会把整个人重复下移到地面以下。
