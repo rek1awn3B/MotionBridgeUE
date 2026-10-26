@@ -176,7 +176,17 @@ void AMotionBridgeRootMotionCharacter::ConfigurePortfolioWalkDemo()
     }
     if (FootIKComponent)
     {
-        FootIKComponent->ConfigureFlatGroundWalkDemo();
+        const bool bDisableFootIK = FParse::Param(
+            FCommandLine::Get(),
+            TEXT("MotionBridgeDisableFootIK"));
+        if (bDisableFootIK)
+        {
+            FootIKComponent->SetComponentTickEnabled(false);
+        }
+        else
+        {
+            FootIKComponent->ConfigureFlatGroundWalkDemo();
+        }
     }
 }
 

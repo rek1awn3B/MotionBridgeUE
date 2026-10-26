@@ -1,6 +1,8 @@
 param(
     [string]$EngineRoot = "",
-    [switch]$FacialDemo
+    [switch]$FacialDemo,
+    [switch]$FrontView,
+    [switch]$DisableFootIK
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,6 +92,14 @@ else
         "-MotionBridgePortfolioWalkRuntimeDemo",
         "-MotionBridgeEnableWebSocket"
     )
+    if ($FrontView)
+    {
+        $EditorArguments += "-MotionBridgeFrontView"
+    }
+    if ($DisableFootIK)
+    {
+        $EditorArguments += "-MotionBridgeDisableFootIK"
+    }
 }
 
 $ServerProcess = $null

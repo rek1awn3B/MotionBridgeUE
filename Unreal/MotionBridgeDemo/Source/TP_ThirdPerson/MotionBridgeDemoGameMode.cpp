@@ -173,16 +173,33 @@ void AMotionBridgeDemoGameMode::BeginPlay()
     {
         if (Character)
         {
-            // 跟随角色根节点，只抵消整体前进，不干预骨骼动画。侧视角能让
-            // 支撑脚是否滑动、脚掌是否穿地和膝关节是否抽动更容易观察。
+            // 跟随角色根节点，只抵消整体前进，不干预骨骼动画。
             Camera->AttachToActor(
                 Character,
                 FAttachmentTransformRules::SnapToTargetNotIncludingScale);
             // Manny 的骨盆在该重定向流中相对 root 沿局部 Y 偏移约 259 cm；
             // 网格再绕 Actor 旋转 -90° 后，这个偏移落到世界 X。相机同步
             // 补偿该偏移，才能让可见身体（而不是胶囊原点）处在画面中央。
-            Camera->SetActorRelativeLocation(FVector(-260.0f, -450.0f, 80.0f));
-            Camera->SetActorRelativeRotation(FRotator(-10.0f, 90.0f, 0.0f));
+            const bool bFrontView = FParse::Param(
+                FCommandLine::Get(),
+                TEXT("MotionBridgeFrontView"));
+            if (bFrontView)
+            {
+                // 从角色前进方向迎面观察，用来检查左右腿语义、髋部内收
+                // 和双脚是否跨过身体中线。
+                Camera->SetActorRelativeLocation(
+                    FVector(190.0f, 0.0f, 80.0f));
+                Camera->SetActorRelativeRotation(
+                    FRotator(-10.0f, 180.0f, 0.0f));
+            }
+            else
+            {
+                // 侧视角更容易观察支撑脚滑动、脚掌穿地和膝关节抽动。
+                Camera->SetActorRelativeLocation(
+                    FVector(-260.0f, -450.0f, 80.0f));
+                Camera->SetActorRelativeRotation(
+                    FRotator(-10.0f, 90.0f, 0.0f));
+            }
         }
         if (APlayerController* PlayerController =
                 World->GetFirstPlayerController())

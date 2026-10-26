@@ -67,7 +67,7 @@ R_target_local  = inverse(R_target_parent_global) * R_target_global
 | UE 5.6 Game / Editor Target | 编译通过 |
 | WebSocket 实时姿态 | 89 骨；拒绝帧 0；Pose Snapshot 已应用；脊柱误差 `0.000°` |
 | WebSocket 自动重连 | 服务端每 50 帧断开；UE 完成 3 次重连并恢复姿势流 |
-| 运行时 Foot IK | 左右鞋底最小间隙 `+0.867 / +1.012 cm` |
+| 运行时 Foot IK | 左右鞋底最小间隙 `+0.009 / +0.004 cm`；平地步态无持续屈膝 |
 | Morph Target | 4/4 通道映射，缺失 0 |
 | Root Motion | 由角色 Actor/胶囊消费，不在骨架 root 中重复应用 |
 
@@ -91,6 +91,13 @@ py -3.12 -m pip install -r requirements.txt
 
 ```powershell
 .\scripts\run_websocket_demo.ps1
+```
+
+正面检查左右腿和屈膝情况，或关闭 Foot IK 做 A/B 对照：
+
+```powershell
+.\scripts\run_websocket_demo.ps1 -FrontView
+.\scripts\run_websocket_demo.ps1 -FrontView -DisableFootIK
 ```
 
 运行端到端 WebSocket、重连、Foot IK 与 Morph Target 验收：

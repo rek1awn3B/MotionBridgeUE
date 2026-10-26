@@ -31,7 +31,7 @@ raw BVH
 | Python | 校准数值 | PASS，最大旋转误差 `7.157°`，最差 `foot_l` |
 | UE | `MBEditor` Win64 Development | Succeeded |
 | WebSocket | 原始 BVH 转换后的 89 骨姿势 | PASS，拒绝帧 0，直接 Manny Pose Snapshot |
-| Foot IK | 平地运行时后处理 | PASS，左右鞋底最小间隙均为正 |
+| Foot IK | 平地运行时后处理 | PASS，左右鞋底最小间隙均为正；取消骨盆下压并将接触余量校准为 `4.5 cm`，避免持续屈膝 |
 | WebSocket | 每 50 帧强制断线 | PASS，自动重连 3 次并恢复姿势流 |
 | Morph | 四通道实时驱动 | PASS，映射 4、缺失 0 |
 
@@ -77,8 +77,8 @@ snapshot_bones=89
 spine_error_deg=0.000
 
 MOTIONBRIDGE_RUNTIME_FOOT_IK=PASS
-min_left_post_ik_clearance=0.867
-min_right_post_ik_clearance=1.012
+min_left_post_ik_clearance=0.009
+min_right_post_ik_clearance=0.004
 ```
 
 `runtime_retarget=0` 不是省略重定向：它表示 UE 没有再运行另一套跨组件 Retarget 节点；骨架对映射已由 Python 根据当前原始 BVH 帧计算完成。计算方法和校准边界见 [原始 BVH 到 Manny 的运行时骨架映射](runtime_bvh_to_manny.md)。

@@ -92,12 +92,12 @@ public:
     {
         bDrawDebug = false;
         PelvisOffsetScale = 0.0f;
-        PelvisOffsetBias = -2.0f;
+        PelvisOffsetBias = 0.0f;
         HorizontalFootLockStrength = 1.0f;
         WeightResponseSpeed = 16.0f;
         FootLockReleaseResponseSpeed = 8.0f;
         MaxHorizontalFootLockCorrection = 6.0f;
-        ContactSafetyMargin = 8.5f;
+        ContactSafetyMargin = 4.5f;
     }
 
     UFUNCTION(BlueprintPure, Category = "MotionBridge|Foot IK")
