@@ -8,6 +8,7 @@ class UAnimSequence;
 class UMotionBridgeFootIKComponent;
 class UMotionBridgeReceiverComponent;
 class UMotionBridgeWebSocketClientComponent;
+class USkeletalMeshComponent;
 
 /**
  * Root Motion 验证角色。
@@ -23,11 +24,26 @@ class TP_THIRDPERSON_API AMotionBridgeRootMotionCharacter : public ACharacter
 public:
     AMotionBridgeRootMotionCharacter();
 
+    USkeletalMeshComponent* GetRuntimeRetargetSourceMesh() const
+    {
+        return RuntimeRetargetSourceMesh;
+    }
+
+    USkeletalMeshComponent* GetRuntimeRetargetProbeMesh() const
+    {
+        return RuntimeRetargetProbeMesh;
+    }
+
+    bool ShouldUseRuntimeRetargetPipeline() const
+    {
+        return bUseRuntimeRetargetPipeline;
+    }
+
     /** 在 FinishSpawningActor 前切换为可公开分发的 100STYLE 前进走路演示。 */
     void ConfigurePortfolioWalkDemo();
 
     /**
-     * Root Motion 验证关卡保持开启；Foot IK 验证关卡关闭，
+     * Day 9 的 Root Motion 关卡保持开启；Day 10 的 Foot IK 关卡关闭，
      * 让同一段重定向动作原地播放，避免 180 度掉头轨迹干扰脚部观察。
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MotionBridge|Root Motion")
@@ -57,7 +73,7 @@ protected:
     virtual void Tick(float DeltaSeconds) override;
 
     /**
-     * 默认仍指向 Root Motion 回归动画；独立演示关卡可以在 Actor 实例上
+     * 默认仍指向 Day 9 的回归动画；独立演示关卡可以在 Actor 实例上
      * 换成新的公开 BVH 重定向结果，而不影响既有 UDP 自动验收。
      */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MotionBridge|Root Motion")
@@ -72,6 +88,20 @@ private:
 
     UPROPERTY(VisibleAnywhere, Category = "MotionBridge|Realtime")
     TObjectPtr<UMotionBridgeWebSocketClientComponent> WebSocketClientComponent;
+
+    /**
+     * 实验性 UE 跨组件重定向路径使用的隐藏源骨架。公开演示默认关闭
+     * 这条路径；Python 已从当前 BVH 帧计算出 Manny 姿势。
+     */
+    UPROPERTY(VisibleAnywhere, Category = "MotionBridge|Runtime Retarget")
+    TObjectPtr<USkeletalMeshComponent> RuntimeRetargetSourceMesh;
+
+    /**
+     * 不渲染的 Manny IK 前姿势探针。默认路径中它消费与可见角色相同的
+     * Manny Pose Snapshot，但关闭 Foot IK，供地面检测读取稳定的原始脚姿势。
+     */
+    UPROPERTY(VisibleAnywhere, Category = "MotionBridge|Runtime Retarget")
+    TObjectPtr<USkeletalMeshComponent> RuntimeRetargetProbeMesh;
 
     FVector StartLocation = FVector::ZeroVector;
     FVector TotalRootMotionTranslation = FVector::ZeroVector;
@@ -105,6 +135,7 @@ private:
     float MaxUdpBoneMotionDegrees = 0.0f;
 
     bool bNetworkRootInitialized = false;
+    bool bUseRuntimeRetargetPipeline = false;
     double LastNetworkRootTimestampSeconds = 0.0;
     FVector PreviousNetworkRootPosition = FVector::ZeroVector;
     FQuat PreviousNetworkRootRotation = FQuat::Identity;

@@ -122,7 +122,8 @@ Recovery  hard resync 0
 python tools/send_motionbridge_udp.py --frames 30 --fps 30
 ```
 
-从已有 Manny 动画导出真实姿势流后回放：
+下面的 Manny 姿势流回放命令只用于 UDP 协议、缓冲和断流恢复的回归测试，
+不是当前公开演示的数据生产路径：
 
 ```powershell
 # 在 UnrealEditor-Cmd 中执行导出脚本
@@ -169,6 +170,9 @@ stream definition，并从时间戳 0 回放完整动作。这同时覆盖真实
   `69.585 cm`，`MOTIONBRIDGE_UDP_RECONNECT=PASS`；
 - 不发送网络帧时，AnimSequence 回退和原 Foot IK 运行时验收仍为 `PASS`。
 
-当前动态输入来自已经离线重定向完成的 Manny AnimSequence，不是动捕设备直接
-输出，也不是原始 BVH 在 UE 中实时重定向。持续输入、超时回退、通信统计和断流
-重连已经完成；后续优先补端到端延迟与性能采样，再决定是否实现原始骨架的在线重定向。
+上述验收记录描述的是早期 UDP 传输层回归测试。当前公开演示改用 WebSocket：
+Python 服务从当前原始 BVH 帧计算 Manny 姿势，再交给同一套 UE 缓冲、插值、
+Pose Snapshot、Root Motion 和 Foot IK 消费链路；它不会在运行时读取这份预导出的
+Manny 流。完整边界和校准方法见
+[原始 BVH 到 Manny 的运行时骨架映射](runtime_bvh_to_manny.md)。当前输入仍是文件中的
+BVH 片段循环，而非直接连接硬件动捕设备。

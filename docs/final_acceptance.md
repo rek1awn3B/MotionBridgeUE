@@ -1,112 +1,123 @@
 # MotionBridge UE 最终验收报告
 
-验收日期：2026-10-22（Asia/Shanghai）
+验收日期：2026-10-26（Asia/Shanghai）
 
 ## 结论
 
-离线 BVH/FK、Blender/FBX、UE 重定向、Root Motion、Foot IK、第三人称客户端、UDP/WebSocket 实时流、断流恢复、UMG 监控和 Morph Target 驱动均有代码与可重复验收证据。
+当前主链路已从“预先导出的 Manny 姿势流”改为“原始 BVH 在服务启动时转换为 Manny 姿势，再实时发送”。Python 转换、UE WebSocket 稳态、强制断线重连、Pose Snapshot、角色 Root Motion、Foot IK 和 Morph Target 均有可重复执行的自动验收。
+
+## 被验收的真实数据路径
+
+```text
+raw BVH
+ -> parser / channel decoder / FK
+ -> source calibration
+ -> source-global to Manny-global fixed rotation maps
+ -> Manny local pose (89 bones)
+ -> WebSocket
+ -> UE queue / validation / interpolation
+ -> Pose Snapshot + Actor root motion + Foot IK
+```
+
+实时服务显式接收 `--bvh-file`、`--calibration-file` 和 `--manny-calibration-file`。两份参考姿势流只用于重新生成校准，不是运行时输入。
 
 ## 自动化验收矩阵
 
 | 层级 | 验收内容 | 结果 |
 | --- | --- | --- |
-| Python | `unittest discover` | 50 项通过 |
-| C++ | CMake Release 构建 | 7 个动画与实时系统目标通过 |
-| C++ | 逐个运行 `*_lab.exe` | 7 个退出码均为 0 |
-| UE | `TP_ThirdPerson` Win64 Development | Succeeded |
+| Python | `unittest discover` | PASS，55/55 |
+| Python | 原始 BVH 到规范源姿势 | PASS，165 帧、25 源骨 |
+| Python | 规范源姿势到 Manny | PASS，89 目标骨、26 个动态映射 |
+| Python | 校准数值 | PASS，最大旋转误差 `7.157°`，最差 `foot_l` |
 | UE | `MBEditor` Win64 Development | Succeeded |
-| UDP | 89 骨骼真实 Manny 姿势流 | PASS，最终误差 0.000 |
-| UDP | 停发 0.8 秒后重启流 | PASS，首帧位移 0.000 cm |
-| WebSocket | 60 FPS、89 骨骼实时姿态 | PASS，快照已应用到 Manny，脊柱误差 0.000° |
-| WebSocket | 每 50 帧强制断线 | PASS，自动重连 3 次并恢复实时姿态 |
+| WebSocket | 原始 BVH 转换后的 89 骨姿势 | PASS，拒绝帧 0，直接 Manny Pose Snapshot |
+| Foot IK | 平地运行时后处理 | PASS，左右鞋底最小间隙均为正 |
+| WebSocket | 每 50 帧强制断线 | PASS，自动重连 3 次并恢复姿势流 |
 | Morph | 四通道实时驱动 | PASS，映射 4、缺失 0 |
-| 客户端 | 移动、跳跃、落地、相机、AnimInstance | PASS |
 
-## 本次实际执行命令
+## 执行命令
 
-Python：
-
-```powershell
-py -3.12 -m unittest discover -s python -p "test_*.py"
-```
-
-结果：
-
-```text
-Ran 50 tests
-OK
-```
-
-C++：
+Python 转换测试：
 
 ```powershell
-cmake -S . -B build-vs -A x64
-cmake --build build-vs --config Release
+py -3.12 -m unittest discover -s python -p "test_bvh_stream.py" -v
 ```
 
-随后逐个执行 `build-vs/Release/*_lab.exe`，7 个程序全部返回 0。覆盖三维变换、四元数、骨架结构、动作源接口、实时缓冲与 Foot IK。
-
-UE：
+UE Game/Editor 构建：
 
 ```powershell
-Build.bat TP_ThirdPerson Win64 Development MotionBridgeDemo.uproject -WaitMutex -FromMsBuild
-Build.bat MBEditor Win64 Development MotionBridgeDemo.uproject -WaitMutex -FromMsBuild
+Build.bat TP_ThirdPerson Win64 Development MotionBridgeDemo.uproject -WaitMutex -NoHotReloadFromIDE
+Build.bat MBEditor Win64 Development MotionBridgeDemo.uproject -WaitMutex -NoHotReloadFromIDE
 ```
 
-两个 Target 均为 `Result: Succeeded`。
-
-WebSocket、重连和 Morph Target 端到端回归统一由以下脚本启动真实 Python
-服务与 UE NullRHI 实例，并检查日志通过标记：
+端到端实时验收：
 
 ```powershell
 .\scripts\run_realtime_acceptance.ps1
 ```
 
-## 实时系统证据
+该脚本依次启动真实 Python WebSocket 服务和 UE `NullRHI` 实例，执行稳态、断线重连和 Morph 三组测试，并检查明确的 PASS 标记。
 
-### WebSocket 稳态
+## 关键验收字段
+
+### WebSocket 稳态与 Foot IK
 
 ```text
 MOTIONBRIDGE_WEBSOCKET_TEST=PASS
-messages=171 rejected=0 accepted=170
-input_hz=59.99 game_fps=1139.85
-latency_latest_ms=5.80 latency_average_ms=52.54 latency_max_ms=397.90
-latency_samples=170 reconnects=0 connected=1
-pose_applied=1 snapshot_bones=89 spine_error_deg=0.000
+messages=158
+rejected=0
+accepted=157
+input_hz=61.00
+game_fps=60.00
+pose_applied=1
+direct_manny_pose=1
+runtime_retarget=0
+stream_bones=89
+snapshot_bones=89
+spine_error_deg=0.000
+
+MOTIONBRIDGE_RUNTIME_FOOT_IK=PASS
+min_left_post_ik_clearance=0.867
+min_right_post_ik_clearance=1.012
 ```
+
+`runtime_retarget=0` 不是省略重定向：它表示 UE 没有再运行另一套跨组件 Retarget 节点；骨架对映射已由 Python 根据当前原始 BVH 帧计算完成。计算方法和校准边界见 [原始 BVH 到 Manny 的运行时骨架映射](runtime_bvh_to_manny.md)。
 
 ### WebSocket 重连
 
-服务端配置为每 50 帧主动断开：
-
 ```text
 MOTIONBRIDGE_WEBSOCKET_RECONNECT_TEST=PASS
-messages=199 rejected=0 accepted=45 reconnects=3 connected=1
-pose_applied=1 snapshot_bones=89 spine_error_deg=0.000
+reconnects=3
+connected=1
+direct_manny_pose=1
+stream_bones=89
+snapshot_bones=89
 ```
 
 ### Morph Target
 
 ```text
 MOTIONBRIDGE_MORPH_TARGET_TEST=PASS
-mapped=4 missing=0
-smile=0.997 jaw_open=0.497 blink_left=0.936 blink_right=0.936
+mapped=4
+missing=0
 ```
-
-下图记录标量通道与监控面板的技术验收结果：
 
 ![实时表情验收](../artifacts/MotionBridge_RealtimeFacial.png)
 
-## 动画质量证据
+## 校准复现
 
-- [WebSocket 实时驱动 Manny 最终录像](../artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)：状态面板显示约 60 Hz 输入、89 骨骼姿态已应用，拒绝/丢帧/乱序均为 0。录像结尾的瞬间回退是有限动作片段的循环边界。
-- Root Motion 输入水平跨度 `91.866 cm`，Actor/胶囊峰值移动 `91.736 cm`。
-- 平地自然步态完整周期约前进 `660 cm`，左右支撑脚最大漂移约 `2.665 / 2.762 cm`。
-- 10° 斜坡上两脚最大地面倾角均为 `10.000°`；IK 后鞋底最小有符号间隙 `+0.194 / +0.200 cm`。
-- 可公开分发的动作主线使用 CC BY 4.0 的 100STYLE 数据，Manny 重定向演示见 `artifacts/ue_manny_retarget.mp4`。
+```powershell
+py -3.12 python\build_bvh_source_calibration.py
+py -3.12 python\build_manny_retarget_calibration.py
+```
 
-## 测试范围
+第二个脚本读取时间对齐的源/目标参考流并输出 `100style_to_manny_calibration.json`。运行时只使用这份参数文件，不读取目标参考帧。
 
-- 跨骨架动作映射使用 UE IK Retargeter。
-- Morph Target 验收使用四通道确定性测试波形。
-- 延迟测量来自同机回环；跨机器部署需要时钟同步并重新测试。
+## 已知限制
+
+- 当前输入是有限 BVH 片段循环；片段边界会瞬间回到首帧，这不是网络断线。
+- 当前映射只针对 100STYLE 源骨架与 UE5 Manny。新骨架需要重新对应与校准。
+- 26 个主骨动态驱动；Manny 特有的扭转骨、手指和 IK 辅助骨保持参考姿势。
+- `7.157°` 是校准片段内的最大拟合误差，不是任意动作的泛化保证。
+- 表情测试波形用于接口验收，不代表面捕或语音驱动模型。
+- 延迟测量来自同机回环；跨机器部署需要时钟同步后重新测量。

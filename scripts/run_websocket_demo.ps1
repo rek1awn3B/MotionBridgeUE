@@ -10,8 +10,12 @@ $ProjectPath = Join-Path $RepositoryRoot `
     "Unreal\MotionBridgeDemo\MotionBridgeDemo.uproject"
 $ServerPath = Join-Path $RepositoryRoot `
     "tools\motionbridge_websocket_server.py"
-$StreamPath = Join-Path $RepositoryRoot `
-    "artifacts\realtime\manny_root_motion_stream.json"
+$BvhPath = Join-Path $RepositoryRoot `
+    "data\bvh\100style\Neutral_FW_frames_530_694.bvh"
+$CalibrationPath = Join-Path $RepositoryRoot `
+    "data\calibration\100style_source_calibration.json"
+$MannyCalibrationPath = Join-Path $RepositoryRoot `
+    "data\calibration\100style_to_manny_calibration.json"
 
 if (-not $EngineRoot)
 {
@@ -25,20 +29,46 @@ if (-not $EngineRoot)
 
 if (-not $EngineRoot)
 {
-    throw "未找到 UE 5.6。请传入 -EngineRoot 或设置 UE_ROOT。"
+    throw "UE 5.6 was not found. Pass -EngineRoot or set UE_ROOT."
 }
 
 $Editor = Join-Path $EngineRoot "Engine\Binaries\Win64\UnrealEditor.exe"
 if (-not (Test-Path -LiteralPath $Editor))
 {
-    throw "UnrealEditor.exe 不存在：$Editor"
+    throw "UnrealEditor.exe does not exist: $Editor"
 }
-if (-not (Test-Path -LiteralPath $StreamPath))
+if (-not (Test-Path -LiteralPath $BvhPath))
 {
-    throw "实时演示数据不存在：$StreamPath"
+    throw "Raw BVH does not exist: $BvhPath"
+}
+if (-not (Test-Path -LiteralPath $CalibrationPath))
+{
+    throw "Source skeleton calibration does not exist: $CalibrationPath"
+}
+if (-not (Test-Path -LiteralPath $MannyCalibrationPath))
+{
+    throw "Manny retarget calibration does not exist: $MannyCalibrationPath"
+}
+$PythonCandidates = @(
+    $env:MOTIONBRIDGE_PYTHON,
+    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+    (Get-Command python -ErrorAction SilentlyContinue).Source
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+$PythonExe = $PythonCandidates | Select-Object -First 1
+if (-not $PythonExe)
+{
+    throw "Python was not found. Set MOTIONBRIDGE_PYTHON to override."
 }
 
-$ServerArguments = @("-3.12", $ServerPath, "--stream-file", $StreamPath)
+$ServerArguments = @(
+    $ServerPath,
+    "--bvh-file",
+    $BvhPath,
+    "--calibration-file",
+    $CalibrationPath,
+    "--manny-calibration-file",
+    $MannyCalibrationPath
+)
 $EditorArguments = @(
     $ProjectPath,
     "/Game/MotionBridge/Maps/L_MotionBridge100StyleDemo",
@@ -66,18 +96,18 @@ $ServerProcess = $null
 try
 {
     $ServerProcess = Start-Process `
-        -FilePath "py" `
+        -FilePath $PythonExe `
         -ArgumentList $ServerArguments `
         -WindowStyle Hidden `
         -PassThru
     Start-Sleep -Seconds 1
     if ($ServerProcess.HasExited)
     {
-        throw "WebSocket 服务启动失败，退出码：$($ServerProcess.ExitCode)"
+        throw "WebSocket server failed with code $($ServerProcess.ExitCode)."
     }
 
-    Write-Host "WebSocket 服务已启动：ws://127.0.0.1:8765/"
-    Write-Host "关闭 UE 演示窗口后，服务会自动退出。"
+    Write-Host "WebSocket server started: ws://127.0.0.1:8765/"
+    Write-Host "The server exits after the UE demo window closes."
     $EditorProcess = Start-Process `
         -FilePath $Editor `
         -ArgumentList $EditorArguments `

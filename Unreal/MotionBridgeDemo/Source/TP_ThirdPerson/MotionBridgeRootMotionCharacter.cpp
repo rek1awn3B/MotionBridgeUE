@@ -45,6 +45,47 @@ AMotionBridgeRootMotionCharacter::AMotionBridgeRootMotionCharacter()
     WebSocketClientComponent =
         CreateDefaultSubobject<UMotionBridgeWebSocketClientComponent>(
             TEXT("WebSocketClientComponent"));
+    RuntimeRetargetSourceMesh =
+        CreateDefaultSubobject<USkeletalMeshComponent>(
+            TEXT("RuntimeRetargetSourceMesh"));
+    RuntimeRetargetSourceMesh->SetupAttachment(GetCapsuleComponent());
+    RuntimeRetargetSourceMesh->SetCollisionEnabled(
+        ECollisionEnabled::NoCollision);
+    RuntimeRetargetSourceMesh->SetGenerateOverlapEvents(false);
+    RuntimeRetargetSourceMesh->SetCastShadow(false);
+    RuntimeRetargetSourceMesh->SetHiddenInGame(true);
+    RuntimeRetargetSourceMesh->VisibilityBasedAnimTickOption =
+        EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+    RuntimeRetargetProbeMesh =
+        CreateDefaultSubobject<USkeletalMeshComponent>(
+            TEXT("RuntimeRetargetProbeMesh"));
+    RuntimeRetargetProbeMesh->SetupAttachment(GetCapsuleComponent());
+    RuntimeRetargetProbeMesh->SetCollisionEnabled(
+        ECollisionEnabled::NoCollision);
+    RuntimeRetargetProbeMesh->SetGenerateOverlapEvents(false);
+    RuntimeRetargetProbeMesh->SetCastShadow(false);
+    RuntimeRetargetProbeMesh->SetHiddenInGame(true);
+    RuntimeRetargetProbeMesh->VisibilityBasedAnimTickOption =
+        EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
+    static ConstructorHelpers::FObjectFinder<USkeletalMesh> SourceMeshFinder(
+        TEXT("/Game/MotionBridge/100StyleSource/SK_MotionBridge100StyleSource.SK_MotionBridge100StyleSource"));
+    if (SourceMeshFinder.Succeeded())
+    {
+        RuntimeRetargetSourceMesh->SetSkeletalMeshAsset(
+            SourceMeshFinder.Object);
+    }
+
+    static ConstructorHelpers::FClassFinder<UAnimInstance>
+        SourceAnimBlueprintFinder(
+            TEXT("/Game/MotionBridge/RuntimeRetarget/ABP_MotionBridgeBvhSource"));
+    if (SourceAnimBlueprintFinder.Succeeded())
+    {
+        RuntimeRetargetSourceMesh->SetAnimationMode(
+            EAnimationMode::AnimationBlueprint);
+        RuntimeRetargetSourceMesh->SetAnimInstanceClass(
+            SourceAnimBlueprintFinder.Class);
+    }
 
     GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
     GetCharacterMovement()->bOrientRotationToMovement = false;
@@ -54,17 +95,22 @@ AMotionBridgeRootMotionCharacter::AMotionBridgeRootMotionCharacter()
     if (MeshFinder.Succeeded())
     {
         GetMesh()->SetSkeletalMeshAsset(MeshFinder.Object);
+        RuntimeRetargetProbeMesh->SetSkeletalMeshAsset(MeshFinder.Object);
     }
     // 这段 Root Motion 动画的骨骼轨道已经包含约一个胶囊半高的
     // 垂直根偏移；不能再套用 ThirdPerson 模板的 Mesh -96 cm 下移，
     // 否则整个人（包括双脚射线起点）都会落到地板下方。
     GetMesh()->SetRelativeLocation(FVector::ZeroVector);
     GetMesh()->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+    RuntimeRetargetProbeMesh->SetRelativeLocation(FVector::ZeroVector);
+    RuntimeRetargetProbeMesh->SetRelativeRotation(
+        FRotator(0.0f, -90.0f, 0.0f));
     GetMesh()->SetDisablePostProcessBlueprint(true);
     // 自动验收会使用 NullRHI；即使 Mesh 没有被摄像机渲染，也必须持续
     // 刷新动画姿势，否则脚骨骼位置会停在参考姿势，射线测试失去意义。
     GetMesh()->VisibilityBasedAnimTickOption =
         EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+    RuntimeRetargetProbeMesh->SetDisablePostProcessBlueprint(true);
 
     static ConstructorHelpers::FObjectFinder<UAnimSequence> AnimationFinder(
         TEXT("/Game/MotionBridge/RootMotionRetargeted/A_MotionBridgeRootMotion_Manny.A_MotionBridgeRootMotion_Manny"));
@@ -84,6 +130,10 @@ AMotionBridgeRootMotionCharacter::AMotionBridgeRootMotionCharacter()
 
 void AMotionBridgeRootMotionCharacter::ConfigurePortfolioWalkDemo()
 {
+    // Python 端从原始 BVH 逐帧执行公开的坐标标定与 Manny 骨骼映射；
+    // UE 收到的是运行时计算出的 Manny 局部姿势，不再依赖不稳定的
+    // Retarget Pose From Mesh 跨组件双缓冲读取。
+    bUseRuntimeRetargetPipeline = false;
     bUseConstantSpeedRootMotion = false;
     bLoopRootMotionPlayback = true;
     ConstantSpeedRootMotionBlend = 0.0f;
@@ -97,10 +147,12 @@ void AMotionBridgeRootMotionCharacter::ConfigurePortfolioWalkDemo()
         ReceiverComponent->bConsumeRootMotionAsActorMovement = true;
     }
 
-    // 重定向后的 Manny 姿势以骨盆附近为网格原点，脚踝轨道本身已经在
-    // 原点下方约 84 cm。角色出生点又位于胶囊中心，因此这里不能再套用
-    // 模板蓝图的 -96 cm 网格偏移，否则会把整个人重复下移到地面以下。
-    GetMesh()->SetRelativeLocation(FVector::ZeroVector);
+    // Runtime Retarget 已经通过目标骨架根设置恢复了绝大部分角色高度，
+    // 这里只补偿 Manny 脚底相对胶囊底面的剩余约 8 cm。必须在 BeginPlay
+    // 前设置，让 ACharacter 正确缓存初始 Mesh Offset。
+    GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
+    RuntimeRetargetProbeMesh->SetRelativeLocation(
+        FVector(0.0f, 0.0f, -8.0f));
 
     RootMotionAnimation = LoadObject<UAnimSequence>(
         nullptr,
@@ -108,10 +160,19 @@ void AMotionBridgeRootMotionCharacter::ConfigurePortfolioWalkDemo()
     UClass* AnimClass = LoadClass<UAnimInstance>(
         nullptr,
         TEXT("/Game/MotionBridge/100Style/ABP_MotionBridge100StyleFootIK.ABP_MotionBridge100StyleFootIK_C"));
+    UClass* ProbeAnimClass = LoadClass<UAnimInstance>(
+        nullptr,
+        TEXT("/Game/MotionBridge/RuntimeRetarget/ABP_MotionBridgeMannyRetargetProbe.ABP_MotionBridgeMannyRetargetProbe_C"));
     if (AnimClass)
     {
         GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
         GetMesh()->SetAnimInstanceClass(AnimClass);
+    }
+    if (ProbeAnimClass)
+    {
+        RuntimeRetargetProbeMesh->SetAnimationMode(
+            EAnimationMode::AnimationBlueprint);
+        RuntimeRetargetProbeMesh->SetAnimInstanceClass(ProbeAnimClass);
     }
     if (FootIKComponent)
     {
@@ -124,6 +185,15 @@ void AMotionBridgeRootMotionCharacter::BeginPlay()
     Super::BeginPlay();
 
     StartLocation = GetActorLocation();
+    if (RuntimeRetargetSourceMesh && ReceiverComponent)
+    {
+        RuntimeRetargetSourceMesh->AddTickPrerequisiteComponent(
+            ReceiverComponent);
+        RuntimeRetargetProbeMesh->AddTickPrerequisiteComponent(
+            RuntimeRetargetSourceMesh);
+        GetMesh()->AddTickPrerequisiteComponent(
+            RuntimeRetargetProbeMesh);
+    }
     bRunRealtimePoseTest = FParse::Param(
         FCommandLine::Get(),
         TEXT("MotionBridgeRealtimePoseTest"));

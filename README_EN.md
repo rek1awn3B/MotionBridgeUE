@@ -1,84 +1,53 @@
 # MotionBridge UE
 
-MotionBridge UE is a technical project for real-time character animation. It connects offline BVH processing and Unreal retargeting with runtime UDP/WebSocket streaming, root motion, foot IK, monitoring, reconnection, and Morph Target facial control.
+MotionBridge UE is a realtime animation bridge from raw BVH motion to UE5 Manny. Python parses BVH, computes source local/global poses, maps them to Manny, and streams frames at approximately 60 Hz. Unreal C++ validates and buffers messages, interpolates poses, applies Pose Snapshots and character root motion, runs foot IK, reconnects after transport failures, and exposes runtime diagnostics.
 
-![BVH motion retargeted to UE5 Manny](artifacts/ue_manny_retarget_contact.png)
-
-[![WebSocket-driven UE5 Manny](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png)](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)
-
-Click the image to view an actual runtime capture. Python streams an 89-bone pose at approximately 60 Hz, while Unreal handles WebSocket ingestion, buffering, interpolation, Pose Snapshot application, root motion, and foot IK. The visible jump at the end is the boundary of the finite looping motion clip, not a disconnect or packet-loss event.
-
-## Highlights
-
-- Custom BVH tokenizer, parser, channel decoder, and forward kinematics implementation.
-- Reproducible Blender/FBX/Unreal pipeline and UE IK Retargeter assets for UE5 Manny.
-- Root-motion extraction with frame-by-frame world-pose reconstruction tests.
-- Runtime root motion applied through `CharacterMovement`, avoiding mesh/capsule divergence and double consumption.
-- C++ foot IK with heel/toe traces, pelvis compensation, Two Bone IK, ground-normal alignment, and frame-rate-independent smoothing.
-- Shared versioned JSON ingestion for UDP and WebSocket transports, including validation, bounded buffering, interpolation, timeout fallback, and recovery.
-- Network callbacks enqueue raw messages; Unreal objects are changed only on the game thread.
-- Realtime scalar channels drive four Morph Targets on an original test character.
-- Native C++ UMG diagnostics for connection state, input rate, FPS, end-to-end latency, packet quality, buffer delay, and reconnect count.
-
-## Architecture
+## Actual runtime path
 
 ```text
-BVH -> custom parser/decoder/FK -> validation and visualization
-  \-> Blender/FBX -> UE source skeleton -> IK Retargeter -> Manny
-                                                  \-> root motion
-                                                  \-> foot IK
-
-Python UDP/WebSocket source
-  -> callback/network thread
-  -> MPSC raw-message queue
-  -> game-thread validation and time-sorted buffer
-  -> interpolation
-     ├─ local bone pose -> Pose Snapshot -> AnimGraph
-     ├─ root motion -> CharacterMovement
-     └─ scalar channels -> Morph Target driver
-  -> C++ UMG diagnostics and automated acceptance logs
+raw BVH
+  -> custom parser / channel decoder / forward kinematics
+  -> source-coordinate calibration
+  -> per-frame source global rotations
+  -> calibrated skeleton-pair map: R_target_global = A * R_source_global * B
+  -> Manny local rotations
+  -> 89-bone packet + separate actor root motion
+  -> WebSocket
+  -> Unreal queue / validation / interpolation
+  -> Pose Snapshot + CharacterMovement + foot IK
 ```
 
-## Verified results
+The runtime server reads the raw BVH and two calibration JSON files. It does **not** read pre-exported Manny pose frames. `source_reference_stream.json` and `manny_root_motion_stream.json` are offline calibration/reproducibility inputs only.
 
-- 50/50 Python tests pass.
-- 7/7 C++ motion-system tests build and exit successfully.
-- Unreal Engine 5.6 Game and Editor targets build successfully.
-- UDP playback reproduces 69 frames over 89 Manny bones with `0.000` final local rotation/translation error.
-- WebSocket loopback runs at `59.99 Hz` over 89 bones with zero rejected frames; the pose reached Manny with `0.000°` measured spine error.
-- Forced server disconnects were recovered automatically three times while the 89-bone pose stream resumed.
-- Four Morph Targets were mapped and driven with zero missing channels.
-- On a 10-degree slope, both feet matched `10.000°`; minimum sole clearances were `+0.194 / +0.200 cm`.
+The fixed 100STYLE-to-Manny calibration dynamically maps 26 major joints. Manny-only twist, finger, and IK helper bones remain at target reference pose, while the packet preserves the full 89-bone target order. On the aligned validation clip, the maximum fitted rotation error is `7.157°` at `foot_l`. This is a calibrated mapping for one source/target skeleton pair, not an arbitrary-skeleton automatic retargeter.
 
-See [docs/final_acceptance.md](docs/final_acceptance.md) for commands and evidence.
+See [docs/runtime_bvh_to_manny.md](docs/runtime_bvh_to_manny.md) for the math, calibration inputs, and limitations.
 
-## Quick start
+## Implemented systems
+
+- Custom BVH tokenizer, parser, channel decoder, and forward kinematics.
+- Runtime source-to-Manny pose conversion from the current BVH frame.
+- Versioned UDP/WebSocket JSON ingestion with validation, a bounded time-sorted buffer, interpolation, timeout fallback, and reconnection.
+- MPSC handoff from network callbacks; Unreal objects are updated only on the game thread.
+- Actor/capsule root motion separated from skeletal pelvis motion.
+- C++ foot IK with heel/toe traces, pelvis compensation, Two Bone IK, surface-normal alignment, and frame-rate-independent smoothing.
+- Native C++ UMG diagnostics and four Morph Target validation channels.
+- A separate offline Blender/FBX/UE IK Retargeter workflow retained for comparison and asset production; it is not required by the realtime server.
+
+## Reproduce
 
 Requirements: Unreal Engine 5.6, Visual Studio 2022 with C++ game development tools, and Python 3.12.
 
 ```powershell
 py -3.12 -m pip install -r requirements.txt
-.\scripts\setup_unreal_demo.ps1 -EngineRoot "C:\Program Files\Epic Games\UE_5.6"
-.\scripts\run_websocket_demo.ps1 -FacialDemo
+.\scripts\setup_unreal_demo.ps1 -EngineRoot "D:\Program Files\Epic Games\UE_5.6"
+.\scripts\run_websocket_demo.ps1
+.\scripts\run_realtime_acceptance.ps1
+py -3.12 -m unittest discover -s python -p "test_bvh_stream.py" -v
 ```
 
-Run build and unit acceptance from a clean CMake configuration:
+The final realtime acceptance verifies an 89-bone direct Manny snapshot, zero rejected frames, three forced reconnects, runtime foot IK with positive sole clearance, and all four Morph Target channels. Full markers and commands are recorded in [docs/final_acceptance.md](docs/final_acceptance.md).
 
-```powershell
-.\scripts\run_acceptance.ps1
-```
+The complete Python suite passes 55/55 tests, including four raw-BVH runtime conversion tests and source-provenance metadata coverage.
 
-Include live WebSocket, reconnect, and Morph Target integration tests with:
-
-```powershell
-.\scripts\run_acceptance.ps1 -RunRealtime
-```
-
-## Implementation scope
-
-- The project implements BVH/FK, root-motion processing, runtime ingestion and buffering, thread handoff, foot IK, diagnostics, and Morph-channel driving.
-- Cross-skeleton motion mapping uses Unreal Engine's IK Retargeter.
-- Public motion samples use the CC BY 4.0 100STYLE dataset; latency figures come from local loopback tests.
-
-Project code is released under the [MIT License](LICENSE). Third-party data and
-Epic Games assets are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Public motion data comes from the CC BY 4.0 100STYLE dataset. Project code is released under the [MIT License](LICENSE); third-party and Epic Games assets retain their own terms as documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

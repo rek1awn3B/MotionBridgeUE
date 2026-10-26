@@ -321,6 +321,8 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
 
     FMotionBridgeStreamStats Stats;
     ReceiverComponent->GetStreamStats(Stats);
+    FMotionBridgeStreamDefinition StreamDefinition;
+    ReceiverComponent->TryGetStreamDefinition(StreamDefinition);
 
     const ACharacter* CharacterOwner = Cast<ACharacter>(GetOwner());
     const USkeletalMeshComponent* Mesh = CharacterOwner
@@ -352,13 +354,22 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
                 ActualSpine.AngularDistance(ExpectedSpine));
         }
     }
-    const bool bRealtimePoseApplied =
+    const bool bDirectMannyPoseApplied =
         MotionAnimInstance &&
         MotionAnimInstance->IsRealtimePoseValid() &&
         Snapshot &&
         Snapshot->bIsValid &&
         SnapshotBoneCount >= 80 &&
         SpineErrorDegrees <= 0.5f;
+    const bool bRuntimeRetargetApplied =
+        MotionAnimInstance &&
+        MotionAnimInstance->IsRuntimeRetargetValid() &&
+        StreamDefinition.BoneNames.Num() >= 20 &&
+        StreamDefinition.BoneNames.Contains(TEXT("MotionRoot")) &&
+        StreamDefinition.BoneNames.Contains(TEXT("Hips")) &&
+        !StreamDefinition.BoneNames.Contains(TEXT("pelvis"));
+    const bool bRealtimePoseApplied =
+        bDirectMannyPoseApplied || bRuntimeRetargetApplied;
     if (bRunWebSocketReconnectTest &&
         (Stats.WebSocketReconnectAttempts < 2 ||
          !Stats.bWebSocketConnected ||
@@ -393,7 +404,7 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
     UE_LOG(
         LogTemp,
         Display,
-        TEXT("MOTIONBRIDGE_%s=%s|messages=%lld|rejected=%lld|accepted=%lld|input_hz=%.2f|game_fps=%.2f|latency_latest_ms=%.2f|latency_average_ms=%.2f|latency_max_ms=%.2f|latency_samples=%lld|reconnects=%lld|connected=%d|pose_applied=%d|snapshot_bones=%d|spine_error_deg=%.3f"),
+        TEXT("MOTIONBRIDGE_%s=%s|messages=%lld|rejected=%lld|accepted=%lld|input_hz=%.2f|game_fps=%.2f|latency_latest_ms=%.2f|latency_average_ms=%.2f|latency_max_ms=%.2f|latency_samples=%lld|reconnects=%lld|connected=%d|pose_applied=%d|direct_manny_pose=%d|runtime_retarget=%d|stream_bones=%d|snapshot_bones=%d|spine_error_deg=%.3f"),
         bRunWebSocketReconnectTest
             ? TEXT("WEBSOCKET_RECONNECT_TEST")
             : TEXT("WEBSOCKET_TEST"),
@@ -410,6 +421,9 @@ void UMotionBridgeWebSocketClientComponent::UpdateWebSocketTest(
         Stats.WebSocketReconnectAttempts,
         Stats.bWebSocketConnected,
         bRealtimePoseApplied,
+        bDirectMannyPoseApplied,
+        bRuntimeRetargetApplied,
+        StreamDefinition.BoneNames.Num(),
         SnapshotBoneCount,
         SpineErrorDegrees);
     GLog->FlushThreadedLogs();

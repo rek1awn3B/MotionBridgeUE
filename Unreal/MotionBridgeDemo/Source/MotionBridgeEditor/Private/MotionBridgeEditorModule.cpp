@@ -1,16 +1,19 @@
 #include "Modules/ModuleManager.h"
 
 #include "Animation/AnimBlueprint.h"
+#include "Animation/AnimBlueprintGeneratedClass.h"
 #include "Animation/AnimData/IAnimationDataController.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
 #include "Animation/AnimSequence.h"
 #include "AnimationGraphSchema.h"
 #include "AnimGraphNode_BlendListByBool.h"
 #include "AnimGraphNode_ComponentToLocalSpace.h"
+#include "AnimGraphNode_CopyPoseFromMesh.h"
 #include "AnimGraphNode_LocalToComponentSpace.h"
 #include "AnimGraphNode_ModifyBone.h"
 #include "AnimGraphNode_ObserveBone.h"
 #include "AnimGraphNode_PoseSnapshot.h"
+#include "AnimGraphNode_RetargetPoseFromMesh.h"
 #include "AnimGraphNode_Root.h"
 #include "AnimGraphNode_SequencePlayer.h"
 #include "AnimGraphNode_TwoBoneIK.h"
@@ -22,10 +25,13 @@
 #include "K2Node_VariableGet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "../../TP_ThirdPerson/MotionBridgeSourcePoseAnimInstance.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "Engine/SkeletalMesh.h"
+#include "Retargeter/IKRetargeter.h"
 
 namespace MotionBridgeFootIKGraph
 {
@@ -41,6 +47,24 @@ constexpr const TCHAR* HundredStyleBlueprintPath =
     TEXT("/Game/MotionBridge/100Style/ABP_MotionBridge100StyleFootIK.ABP_MotionBridge100StyleFootIK");
 constexpr const TCHAR* HundredStyleAnimationPath =
     TEXT("/Game/MotionBridge/100StyleRetargeted/A_MotionBridge100Style_Manny.A_MotionBridge100Style_Manny");
+constexpr const TCHAR* HundredStyleRetargeterPath =
+    TEXT("/Game/MotionBridge/100StyleRigs/RTG_MotionBridge100StyleToManny.RTG_MotionBridge100StyleToManny");
+constexpr const TCHAR* SourceBlueprintPath =
+    TEXT("/Game/MotionBridge/RuntimeRetarget/ABP_MotionBridgeBvhSource.ABP_MotionBridgeBvhSource");
+constexpr const TCHAR* RuntimeRetargetProbeBlueprintPath =
+    TEXT("/Game/MotionBridge/RuntimeRetarget/ABP_MotionBridgeMannyRetargetProbe.ABP_MotionBridgeMannyRetargetProbe");
+constexpr const TCHAR* RuntimeRetargetProbePackageName =
+    TEXT("/Game/MotionBridge/RuntimeRetarget/ABP_MotionBridgeMannyRetargetProbe");
+constexpr const TCHAR* RuntimeRetargetProbeAssetName =
+    TEXT("ABP_MotionBridgeMannyRetargetProbe");
+constexpr const TCHAR* SourceAnimationPath =
+    TEXT("/Game/MotionBridge/100StyleSource/A_MotionBridge100StyleSource_Anim.A_MotionBridge100StyleSource_Anim");
+constexpr const TCHAR* SourceMeshPath =
+    TEXT("/Game/MotionBridge/100StyleSource/SK_MotionBridge100StyleSource.SK_MotionBridge100StyleSource");
+constexpr const TCHAR* SFUWalkBlueprintPath =
+    TEXT("/Game/MotionBridge/SFUWalk/ABP_MotionBridgeSFUWalkFootIK.ABP_MotionBridgeSFUWalkFootIK");
+constexpr const TCHAR* SFUWalkAnimationPath =
+    TEXT("/Game/MotionBridge/SFUWalkRetargeted/A_MotionBridgeSFUWalk_Manny.A_MotionBridgeSFUWalk_Manny");
 
 template <typename NodeType>
 NodeType* AddNode(UEdGraph& Graph, const int32 X, const int32 Y)
@@ -127,6 +151,28 @@ bool ConnectVariable(
         FindDataPin(TargetNode, TargetPinName, EGPD_Input));
 }
 
+bool ConnectObjectVariable(
+    UEdGraph& Graph,
+    UK2Node_VariableGet& VariableNode,
+    UEdGraphNode& TargetNode,
+    const FName TargetPinName)
+{
+    UEdGraphPin* ValuePin = nullptr;
+    for (UEdGraphPin* Pin : VariableNode.Pins)
+    {
+        if (Pin && Pin->Direction == EGPD_Output &&
+            Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object)
+        {
+            ValuePin = Pin;
+            break;
+        }
+    }
+    return Connect(
+        Graph,
+        ValuePin,
+        FindDataPin(TargetNode, TargetPinName, EGPD_Input));
+}
+
 void RequireConnection(const bool Connected, const TCHAR* Description)
 {
     if (!Connected)
@@ -139,7 +185,8 @@ void Build(
     const TCHAR* TargetBlueprintPath = BlueprintPath,
     const TCHAR* TargetAnimationPath = AnimationPath,
     const TCHAR* ResultKey = TEXT("MOTIONBRIDGE_FOOT_IK_GRAPH"),
-    const float PlayRate = 1.0f)
+    const float PlayRate = 1.0f,
+    const bool bEnableRuntimeRetarget = false)
 {
     UAnimBlueprint* Blueprint = LoadObject<UAnimBlueprint>(nullptr, TargetBlueprintPath);
     UAnimSequence* Animation = LoadObject<UAnimSequence>(nullptr, TargetAnimationPath);
@@ -221,8 +268,36 @@ void Build(
         AddNode<UAnimGraphNode_BlendListByBool>(*AnimGraph, 250, 0);
     PoseSelector->ReconstructNode();
 
+    UAnimGraphNode_CopyPoseFromMesh* RuntimeRetarget = nullptr;
+    UAnimGraphNode_BlendListByBool* RuntimeRetargetSelector = nullptr;
+    if (bEnableRuntimeRetarget)
+    {
+        RuntimeRetarget = AddNode<UAnimGraphNode_CopyPoseFromMesh>(
+            *AnimGraph,
+            480,
+            -240);
+        for (int32 PinIndex = 0;
+             PinIndex < RuntimeRetarget->ShowPinForProperties.Num();
+             ++PinIndex)
+        {
+            if (RuntimeRetarget->ShowPinForProperties[PinIndex].PropertyName ==
+                TEXT("SourceMeshComponent"))
+            {
+                RuntimeRetarget->SetPinVisibility(true, PinIndex);
+                break;
+            }
+        }
+        RuntimeRetarget->ReconstructNode();
+        RuntimeRetargetSelector =
+            AddNode<UAnimGraphNode_BlendListByBool>(*AnimGraph, 710, 0);
+        RuntimeRetargetSelector->ReconstructNode();
+    }
+
     UAnimGraphNode_LocalToComponentSpace* LocalToComponent =
-        AddNode<UAnimGraphNode_LocalToComponentSpace>(*AnimGraph, 500, 0);
+        AddNode<UAnimGraphNode_LocalToComponentSpace>(
+            *AnimGraph,
+            bEnableRuntimeRetarget ? 950 : 500,
+            0);
 
     UAnimGraphNode_ObserveBone* ObserveLeftFoot =
         AddNode<UAnimGraphNode_ObserveBone>(*AnimGraph, 750, -120);
@@ -288,9 +363,39 @@ void Build(
     RequireConnection(
         Connect(*AnimGraph, FindPosePin(*Sequence, EGPD_Output), FindDataPin(*PoseSelector, TEXT("BlendPose_1"), EGPD_Input)),
         TEXT("sequence_to_false_pose"));
-    RequireConnection(
-        Connect(*AnimGraph, FindPosePin(*PoseSelector, EGPD_Output), FindPosePin(*LocalToComponent, EGPD_Input)),
-        TEXT("pose_selector_to_local_to_component"));
+    if (bEnableRuntimeRetarget)
+    {
+        RequireConnection(
+            Connect(
+                *AnimGraph,
+                FindPosePin(*RuntimeRetarget, EGPD_Output),
+                FindDataPin(
+                    *RuntimeRetargetSelector,
+                    TEXT("BlendPose_0"),
+                    EGPD_Input)),
+            TEXT("runtime_retarget_to_true_pose"));
+        RequireConnection(
+            Connect(
+                *AnimGraph,
+                FindPosePin(*PoseSelector, EGPD_Output),
+                FindDataPin(
+                    *RuntimeRetargetSelector,
+                    TEXT("BlendPose_1"),
+                    EGPD_Input)),
+            TEXT("fallback_selector_to_false_pose"));
+        RequireConnection(
+            Connect(
+                *AnimGraph,
+                FindPosePin(*RuntimeRetargetSelector, EGPD_Output),
+                FindPosePin(*LocalToComponent, EGPD_Input)),
+            TEXT("runtime_selector_to_local_to_component"));
+    }
+    else
+    {
+        RequireConnection(
+            Connect(*AnimGraph, FindPosePin(*PoseSelector, EGPD_Output), FindPosePin(*LocalToComponent, EGPD_Input)),
+            TEXT("pose_selector_to_local_to_component"));
+    }
     RequireConnection(
         Connect(*AnimGraph, FindPosePin(*LocalToComponent, EGPD_Output), FindPosePin(*ObserveLeftFoot, EGPD_Input)),
         TEXT("local_to_component_to_observe_left"));
@@ -341,6 +446,34 @@ void Build(
         *AnimGraph, TEXT("bRealtimePoseValid"), 180, 520);
     UK2Node_VariableGet* RealtimePoseSnapshot = AddVariableGet(
         *AnimGraph, TEXT("RealtimePoseSnapshot"), -80, 610);
+
+    if (bEnableRuntimeRetarget)
+    {
+        UK2Node_VariableGet* RuntimeRetargetValid = AddVariableGet(
+            *AnimGraph,
+            TEXT("bRuntimeRetargetValid"),
+            500,
+            520);
+        UK2Node_VariableGet* RetargetProbeMesh = AddVariableGet(
+            *AnimGraph,
+            TEXT("RetargetProbeMeshComponent"),
+            260,
+            -360);
+        RequireConnection(
+            ConnectVariable(
+                *AnimGraph,
+                *RuntimeRetargetValid,
+                *RuntimeRetargetSelector,
+                TEXT("bActiveValue")),
+            TEXT("runtime_retarget_valid"));
+        RequireConnection(
+            ConnectObjectVariable(
+                *AnimGraph,
+                *RetargetProbeMesh,
+                *RuntimeRetarget,
+                TEXT("SourceMeshComponent")),
+            TEXT("runtime_retarget_probe_mesh"));
+    }
 
     RequireConnection(
         ConnectVariable(*AnimGraph, *RealtimePoseValid, *PoseSelector, TEXT("bActiveValue")),
@@ -399,6 +532,258 @@ void Build(
 
     UE_LOG(LogTemp, Display, TEXT("%s=PASS"), ResultKey);
 }
+
+void BuildSourcePoseGraph()
+{
+    UAnimSequence* SourceAnimation = LoadObject<UAnimSequence>(
+        nullptr,
+        SourceAnimationPath);
+    USkeletalMesh* SourceMesh = LoadObject<USkeletalMesh>(
+        nullptr,
+        SourceMeshPath);
+    if (!SourceAnimation || !SourceMesh || !SourceMesh->GetSkeleton())
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=FAIL|missing_source_assets"));
+    }
+
+    UAnimBlueprint* Blueprint = LoadObject<UAnimBlueprint>(
+        nullptr,
+        SourceBlueprintPath);
+    if (!Blueprint)
+    {
+        constexpr const TCHAR* PackageName =
+            TEXT("/Game/MotionBridge/RuntimeRetarget/ABP_MotionBridgeBvhSource");
+        UPackage* Package = CreatePackage(PackageName);
+        Blueprint = Cast<UAnimBlueprint>(
+            FKismetEditorUtilities::CreateBlueprint(
+                UMotionBridgeSourcePoseAnimInstance::StaticClass(),
+                Package,
+                TEXT("ABP_MotionBridgeBvhSource"),
+                BPTYPE_Normal,
+                UAnimBlueprint::StaticClass(),
+                UAnimBlueprintGeneratedClass::StaticClass()));
+    }
+    if (!Blueprint)
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=FAIL|create_blueprint"));
+    }
+
+    if (Blueprint->ParentClass !=
+        UMotionBridgeSourcePoseAnimInstance::StaticClass())
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=FAIL|wrong_parent_class"));
+    }
+    Blueprint->TargetSkeleton = SourceMesh->GetSkeleton();
+
+    UEdGraph* AnimGraph = nullptr;
+    for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+    {
+        if (Graph && Graph->GetFName() == TEXT("AnimGraph"))
+        {
+            AnimGraph = Graph;
+            break;
+        }
+    }
+    if (!AnimGraph)
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=FAIL|missing_anim_graph"));
+    }
+
+    AnimGraph->Modify();
+    UAnimGraphNode_Root* Root = nullptr;
+    for (UEdGraphNode* Node : AnimGraph->Nodes)
+    {
+        if (UAnimGraphNode_Root* Candidate = Cast<UAnimGraphNode_Root>(Node))
+        {
+            Root = Candidate;
+            break;
+        }
+    }
+    if (!Root)
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=FAIL|missing_root"));
+    }
+
+    const TArray<UEdGraphNode*> OldNodes = AnimGraph->Nodes;
+    for (UEdGraphNode* Node : OldNodes)
+    {
+        if (Node && Node != Root)
+        {
+            AnimGraph->RemoveNode(Node);
+        }
+    }
+    Root->BreakAllNodeLinks();
+    Root->NodePosX = 720;
+    Root->NodePosY = 0;
+
+    UAnimGraphNode_SequencePlayer* FallbackSequence =
+        AddNode<UAnimGraphNode_SequencePlayer>(*AnimGraph, 0, 0);
+    FallbackSequence->Node.SetSequence(SourceAnimation);
+    FallbackSequence->ReconstructNode();
+
+    UAnimGraphNode_PoseSnapshot* SourcePose =
+        AddNode<UAnimGraphNode_PoseSnapshot>(*AnimGraph, 0, 220);
+    SourcePose->Node.Mode = ESnapshotSourceMode::SnapshotPin;
+    SourcePose->ReconstructNode();
+    for (int32 PinIndex = 0;
+         PinIndex < SourcePose->ShowPinForProperties.Num();
+         ++PinIndex)
+    {
+        if (SourcePose->ShowPinForProperties[PinIndex].PropertyName ==
+            TEXT("Snapshot"))
+        {
+            SourcePose->SetPinVisibility(true, PinIndex);
+            break;
+        }
+    }
+
+    UAnimGraphNode_BlendListByBool* Selector =
+        AddNode<UAnimGraphNode_BlendListByBool>(*AnimGraph, 350, 0);
+    Selector->ReconstructNode();
+
+    RequireConnection(
+        Connect(
+            *AnimGraph,
+            FindPosePin(*SourcePose, EGPD_Output),
+            FindDataPin(*Selector, TEXT("BlendPose_0"), EGPD_Input)),
+        TEXT("source_snapshot_to_true_pose"));
+    RequireConnection(
+        Connect(
+            *AnimGraph,
+            FindPosePin(*FallbackSequence, EGPD_Output),
+            FindDataPin(*Selector, TEXT("BlendPose_1"), EGPD_Input)),
+        TEXT("source_fallback_to_false_pose"));
+    RequireConnection(
+        Connect(
+            *AnimGraph,
+            FindPosePin(*Selector, EGPD_Output),
+            FindPosePin(*Root, EGPD_Input)),
+        TEXT("source_selector_to_output"));
+
+    UK2Node_VariableGet* SourcePoseValid = AddVariableGet(
+        *AnimGraph,
+        TEXT("bSourcePoseValid"),
+        120,
+        500);
+    UK2Node_VariableGet* SourcePoseSnapshot = AddVariableGet(
+        *AnimGraph,
+        TEXT("SourcePoseSnapshot"),
+        -80,
+        610);
+    RequireConnection(
+        ConnectVariable(
+            *AnimGraph,
+            *SourcePoseValid,
+            *Selector,
+            TEXT("bActiveValue")),
+        TEXT("source_pose_valid"));
+    RequireConnection(
+        ConnectVariable(
+            *AnimGraph,
+            *SourcePoseSnapshot,
+            *SourcePose,
+            TEXT("Snapshot")),
+        TEXT("source_pose_snapshot"));
+
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+
+    UPackage* Package = Blueprint->GetOutermost();
+    Package->MarkPackageDirty();
+    const FString Filename = FPackageName::LongPackageNameToFilename(
+        Package->GetName(),
+        FPackageName::GetAssetPackageExtension());
+    FSavePackageArgs SaveArgs;
+    SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArgs.SaveFlags = SAVE_NoError;
+    if (!UPackage::SavePackage(Package, Blueprint, *Filename, SaveArgs))
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=FAIL|save"));
+    }
+
+    UE_LOG(LogTemp, Display, TEXT("MOTIONBRIDGE_SOURCE_POSE_GRAPH=PASS"));
+}
+
+void BuildRuntimeRetargetProbeBlueprint()
+{
+    if (LoadObject<UAnimBlueprint>(
+            nullptr,
+            RuntimeRetargetProbeBlueprintPath))
+    {
+        UE_LOG(
+            LogTemp,
+            Display,
+            TEXT("MOTIONBRIDGE_RUNTIME_RETARGET_PROBE_GRAPH=PASS|existing=1"));
+        return;
+    }
+
+    UAnimBlueprint* RuntimeRetargetBlueprint =
+        LoadObject<UAnimBlueprint>(nullptr, HundredStyleBlueprintPath);
+    if (!RuntimeRetargetBlueprint)
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_RUNTIME_RETARGET_PROBE_GRAPH=FAIL|missing_source_blueprint"));
+    }
+
+    UPackage* Package = CreatePackage(RuntimeRetargetProbePackageName);
+    UAnimBlueprint* ProbeBlueprint = DuplicateObject<UAnimBlueprint>(
+        RuntimeRetargetBlueprint,
+        Package,
+        RuntimeRetargetProbeAssetName);
+    if (!ProbeBlueprint)
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_RUNTIME_RETARGET_PROBE_GRAPH=FAIL|duplicate"));
+    }
+
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(
+        ProbeBlueprint);
+    FKismetEditorUtilities::CompileBlueprint(ProbeBlueprint);
+    Package->MarkPackageDirty();
+    const FString Filename = FPackageName::LongPackageNameToFilename(
+        Package->GetName(),
+        FPackageName::GetAssetPackageExtension());
+    FSavePackageArgs SaveArgs;
+    SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+    SaveArgs.SaveFlags = SAVE_NoError;
+    if (!UPackage::SavePackage(
+            Package,
+            ProbeBlueprint,
+            *Filename,
+            SaveArgs))
+    {
+        UE_LOG(
+            LogTemp,
+            Fatal,
+            TEXT("MOTIONBRIDGE_RUNTIME_RETARGET_PROBE_GRAPH=FAIL|save"));
+    }
+    UE_LOG(
+        LogTemp,
+        Display,
+        TEXT("MOTIONBRIDGE_RUNTIME_RETARGET_PROBE_GRAPH=PASS|existing=0"));
+}
 } // namespace MotionBridgeFootIKGraph
 
 namespace MotionBridgeWalkInspection
@@ -417,12 +802,10 @@ void Inspect(const TCHAR* AssetPath)
     }
 
     const float PlayLength = Animation->GetPlayLength();
-    const FAnimExtractContext ExtractionContext(
-        0.0,
-        true,
-        FDeltaTimeRecord(PlayLength),
+    const FTransform RootMotion = Animation->ExtractRootMotion(
+        0.0f,
+        PlayLength,
         false);
-    const FTransform RootMotion = Animation->ExtractRootMotion(ExtractionContext);
     const FVector Translation = RootMotion.GetTranslation();
     const float HorizontalDistance = FVector(
         Translation.X,
@@ -570,12 +953,10 @@ void Rebuild(const TCHAR* AssetPath, const TCHAR* ResultKey)
         UE_LOG(LogTemp, Fatal, TEXT("%s=FAIL|save"), ResultKey);
     }
 
-    const FAnimExtractContext ExtractionContext(
-        0.0,
-        true,
-        FDeltaTimeRecord(Animation->GetPlayLength()),
+    const FTransform RootMotion = Animation->ExtractRootMotion(
+        0.0f,
+        Animation->GetPlayLength(),
         false);
-    const FTransform RootMotion = Animation->ExtractRootMotion(ExtractionContext);
     const USkeleton* Skeleton = Animation->GetSkeleton();
     const FName SkeletonRoot =
         Skeleton && Skeleton->GetReferenceSkeleton().GetNum() > 0
@@ -622,10 +1003,23 @@ public:
                 FCommandLine::Get(),
                 TEXT("MotionBridgeBuild100StyleFootIKGraph")))
         {
+            MotionBridgeFootIKGraph::BuildSourcePoseGraph();
+            MotionBridgeFootIKGraph::BuildRuntimeRetargetProbeBlueprint();
             MotionBridgeFootIKGraph::Build(
                 MotionBridgeFootIKGraph::HundredStyleBlueprintPath,
                 MotionBridgeFootIKGraph::HundredStyleAnimationPath,
-                TEXT("MOTIONBRIDGE_100STYLE_FOOT_IK_GRAPH"));
+                TEXT("MOTIONBRIDGE_100STYLE_FOOT_IK_GRAPH"),
+                1.0f,
+                true);
+        }
+        if (FParse::Param(
+                FCommandLine::Get(),
+                TEXT("MotionBridgeBuildSFUWalkFootIKGraph")))
+        {
+            MotionBridgeFootIKGraph::Build(
+                MotionBridgeFootIKGraph::SFUWalkBlueprintPath,
+                MotionBridgeFootIKGraph::SFUWalkAnimationPath,
+                TEXT("MOTIONBRIDGE_SFU_WALK_FOOT_IK_GRAPH"));
         }
         if (FParse::Param(
                 FCommandLine::Get(),
@@ -640,6 +1034,14 @@ public:
             MotionBridgeAnimationCompression::Rebuild(
                 MotionBridgeFootIKGraph::HundredStyleAnimationPath,
                 TEXT("MOTIONBRIDGE_100STYLE_RECOMPRESS"));
+        }
+        if (FParse::Param(
+                FCommandLine::Get(),
+                TEXT("MotionBridgeRecompressSFUWalk")))
+        {
+            MotionBridgeAnimationCompression::Rebuild(
+                MotionBridgeFootIKGraph::SFUWalkAnimationPath,
+                TEXT("MOTIONBRIDGE_SFU_WALK_RECOMPRESS"));
         }
     }
 };

@@ -11,8 +11,12 @@ $ProjectDirectory = (Resolve-Path (
 $ProjectFile = (Resolve-Path (
     Join-Path $ProjectDirectory "MotionBridgeDemo.uproject"
 )).Path
-$StreamPath = Join-Path $RepositoryRoot `
-    "artifacts\realtime\manny_root_motion_stream.json"
+$BvhPath = Join-Path $RepositoryRoot `
+    "data\bvh\100style\Neutral_FW_frames_530_694.bvh"
+$CalibrationPath = Join-Path $RepositoryRoot `
+    "data\calibration\100style_source_calibration.json"
+$MannyCalibrationPath = Join-Path $RepositoryRoot `
+    "data\calibration\100style_to_manny_calibration.json"
 $OutputDirectory = Join-Path $RepositoryRoot "artifacts\runtime_acceptance"
 
 if (-not $EngineRoot)
@@ -26,16 +30,37 @@ if (-not $EngineRoot)
 }
 if (-not $EngineRoot)
 {
-    throw "未找到 UE 5.6。请传入 -EngineRoot 或设置 UE_ROOT。"
+    throw "UE 5.6 was not found. Pass -EngineRoot or set UE_ROOT."
 }
-if (-not (Test-Path -LiteralPath $StreamPath))
+if (-not (Test-Path -LiteralPath $BvhPath))
 {
-    throw "实时演示数据不存在：$StreamPath"
+    throw "Raw BVH does not exist: $BvhPath"
+}
+if (-not (Test-Path -LiteralPath $CalibrationPath))
+{
+    throw "Source skeleton calibration does not exist: $CalibrationPath"
+}
+if (-not (Test-Path -LiteralPath $MannyCalibrationPath))
+{
+    throw "Manny retarget calibration does not exist: $MannyCalibrationPath"
+}
+$PythonCandidates = @(
+    $env:MOTIONBRIDGE_PYTHON,
+    "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+    (Get-Command python -ErrorAction SilentlyContinue).Source
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+$PythonExe = $PythonCandidates | Select-Object -First 1
+if (-not $PythonExe)
+{
+    throw "Python was not found. Set MOTIONBRIDGE_PYTHON to override."
 }
 
 $Editor = Join-Path $EngineRoot "Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
 $ServerScript = "tools\motionbridge_websocket_server.py"
-$RelativeStream = "artifacts\realtime\manny_root_motion_stream.json"
+$RelativeBvh = "data\bvh\100style\Neutral_FW_frames_530_694.bvh"
+$RelativeCalibration = "data\calibration\100style_source_calibration.json"
+$RelativeMannyCalibration = `
+    "data\calibration\100style_to_manny_calibration.json"
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
 function Invoke-RealtimeCase
@@ -44,7 +69,8 @@ function Invoke-RealtimeCase
         [string]$Name,
         [string[]]$ServerExtraArguments,
         [string[]]$EditorExtraArguments,
-        [string]$PassMarker
+        [string]$PassMarker,
+        [string]$AdditionalPassMarker = ""
     )
 
     $ServerOut = Join-Path $OutputDirectory "$Name-server.out.log"
@@ -52,17 +78,33 @@ function Invoke-RealtimeCase
     $EditorOut = Join-Path $OutputDirectory "$Name-editor.out.log"
     $EditorErr = Join-Path $OutputDirectory "$Name-editor.err.log"
     $EditorLog = Join-Path $OutputDirectory "$Name-editor.log"
+    foreach ($PreviousLog in @(
+        $ServerOut,
+        $ServerErr,
+        $EditorOut,
+        $EditorErr,
+        $EditorLog
+    ))
+    {
+        if (Test-Path -LiteralPath $PreviousLog)
+        {
+            Remove-Item -LiteralPath $PreviousLog -Force
+        }
+    }
     $ServerArguments = @(
-        "-3.12",
         $ServerScript,
-        "--stream-file",
-        $RelativeStream
+        "--bvh-file",
+        $RelativeBvh,
+        "--calibration-file",
+        $RelativeCalibration,
+        "--manny-calibration-file",
+        $RelativeMannyCalibration
     ) + $ServerExtraArguments
     $ServerProcess = $null
     try
     {
         $ServerProcess = Start-Process `
-            -FilePath "py" `
+            -FilePath $PythonExe `
             -ArgumentList $ServerArguments `
             -WorkingDirectory $RepositoryRoot `
             -WindowStyle Hidden `
@@ -72,7 +114,7 @@ function Invoke-RealtimeCase
         Start-Sleep -Seconds 1
         if ($ServerProcess.HasExited)
         {
-            throw "$Name WebSocket 服务启动失败。查看 $ServerErr"
+            throw "$Name WebSocket server failed. See $ServerErr"
         }
 
         $EditorArguments = @(
@@ -83,6 +125,7 @@ function Invoke-RealtimeCase
             "-unattended",
             "-nosplash",
             "-nosound",
+            '-ExecCmds="t.MaxFPS 60"',
             "-MotionBridgeExitAfterTest",
             "-stdout",
             "-FullStdOutLogOutput",
@@ -98,15 +141,24 @@ function Invoke-RealtimeCase
         if (-not $EditorProcess.WaitForExit($TimeoutSeconds * 1000))
         {
             Stop-Process -Id $EditorProcess.Id
-            throw "$Name 超过 $TimeoutSeconds 秒仍未完成。"
+            throw "$Name did not finish within $TimeoutSeconds seconds."
         }
-        if ($EditorProcess.ExitCode -ne 0)
+        # PowerShell 5.1 may leave ExitCode unset after the timed overload.
+        $EditorProcess.WaitForExit()
+        $EditorProcess.Refresh()
+        if ($null -ne $EditorProcess.ExitCode -and $EditorProcess.ExitCode -ne 0)
         {
-            throw "$Name UE 退出码为 $($EditorProcess.ExitCode)。"
+            throw "$Name UE exited with code $($EditorProcess.ExitCode)."
         }
         if (-not (Select-String -LiteralPath $EditorLog -SimpleMatch $PassMarker))
         {
-            throw "$Name 没有产生通过标记：$PassMarker"
+            throw "$Name did not emit pass marker: $PassMarker"
+        }
+        if ($AdditionalPassMarker -and -not (
+            Select-String -LiteralPath $EditorLog -SimpleMatch $AdditionalPassMarker
+        ))
+        {
+            throw "$Name did not emit pass marker: $AdditionalPassMarker"
         }
         Write-Host "PASS  $Name" -ForegroundColor Green
     }
@@ -126,7 +178,8 @@ Invoke-RealtimeCase `
         "-MotionBridgePortfolioWalkRuntimeDemo",
         "-MotionBridgeWebSocketTest"
     ) `
-    -PassMarker "MOTIONBRIDGE_WEBSOCKET_TEST=PASS"
+    -PassMarker "MOTIONBRIDGE_WEBSOCKET_TEST=PASS" `
+    -AdditionalPassMarker "MOTIONBRIDGE_RUNTIME_FOOT_IK=PASS"
 
 Invoke-RealtimeCase `
     -Name "websocket-reconnect" `

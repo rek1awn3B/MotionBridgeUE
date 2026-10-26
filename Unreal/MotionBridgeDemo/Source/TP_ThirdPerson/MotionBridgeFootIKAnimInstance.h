@@ -8,6 +8,7 @@
 class ACharacter;
 class UMotionBridgeFootIKComponent;
 class UMotionBridgeReceiverComponent;
+class USkeletalMeshComponent;
 
 /**
  * 把游戏线程中的地面检测结果转换为 AnimGraph 使用的组件空间参数。
@@ -22,6 +23,7 @@ public:
     virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 
     bool IsRealtimePoseValid() const { return bRealtimePoseValid; }
+    bool IsRuntimeRetargetValid() const { return bRuntimeRetargetValid; }
     const FPoseSnapshot& GetRealtimePoseSnapshot() const
     {
         return RealtimePoseSnapshot;
@@ -76,9 +78,21 @@ protected:
     UPROPERTY(BlueprintReadOnly, Category = "MotionBridge|Realtime")
     FPoseSnapshot RealtimePoseSnapshot;
 
+    /** 隐藏的 BVH 源骨架，由 Retarget Pose From Mesh 节点读取。 */
+    UPROPERTY(BlueprintReadOnly, Category = "MotionBridge|Runtime Retarget")
+    TObjectPtr<USkeletalMeshComponent> RetargetSourceMeshComponent;
+
+    /** 已完成 Source -> Manny 重定向、但尚未叠加 Foot IK 的隐藏探针。 */
+    UPROPERTY(BlueprintReadOnly, Category = "MotionBridge|Runtime Retarget")
+    TObjectPtr<USkeletalMeshComponent> RetargetProbeMeshComponent;
+
+    UPROPERTY(BlueprintReadOnly, Category = "MotionBridge|Runtime Retarget")
+    bool bRuntimeRetargetValid = false;
+
 private:
     void CacheOwnerAndComponent();
     void UpdateRealtimePose();
+    void UpdateRuntimeRetargetState();
 
     UPROPERTY(Transient)
     TObjectPtr<ACharacter> CharacterOwner;

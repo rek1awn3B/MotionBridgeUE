@@ -29,11 +29,10 @@ artifacts/**
 !artifacts/MotionBridge_RealtimeFacial.png
 !artifacts/candidates/
 artifacts/candidates/**
-!artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4
-!artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png
 !artifacts/realtime/
 artifacts/realtime/**
 !artifacts/realtime/manny_root_motion_stream.json
+!artifacts/realtime/source_reference_stream.json
 
-# 本地专用素材不进入公开仓库。
+# SFU Mocap 等本地专用素材不进入公开仓库。
 local_assets/

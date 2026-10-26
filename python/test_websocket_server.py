@@ -43,6 +43,16 @@ class WebSocketServerTests(unittest.TestCase):
         self.assertEqual(definition["bones"], ["root"])
         self.assertEqual(definition["channels"], SERVER.FACIAL_CHANNELS)
 
+    def test_stream_definition_preserves_source_provenance(self):
+        stream = sample_stream()
+        stream["source_format"] = "BVH"
+        stream["source_file"] = "walk.bvh"
+        stream["retarget_mode"] = "calibrated-map"
+        definition = SERVER.build_stream_definition(stream)
+        self.assertEqual(definition["source_format"], "BVH")
+        self.assertEqual(definition["source_file"], "walk.bvh")
+        self.assertEqual(definition["retarget_mode"], "calibrated-map")
+
     def test_frame_packet_rewrites_clock_and_adds_sender_timestamp(self):
         packet = SERVER.build_frame_packet(
             sample_stream()["frames"][0],

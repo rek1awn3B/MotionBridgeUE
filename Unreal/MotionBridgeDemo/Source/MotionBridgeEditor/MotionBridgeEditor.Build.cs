@@ -16,6 +16,8 @@ public class MotionBridgeEditor : ModuleRules
             "BlueprintGraph",
             "AnimGraph",
             "AnimGraphRuntime",
+            "IKRig",
+            "IKRigDeveloper",
             "TP_ThirdPerson"
         });
     }

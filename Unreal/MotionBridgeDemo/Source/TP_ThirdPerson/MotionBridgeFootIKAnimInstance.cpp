@@ -9,6 +9,8 @@
 #include "Misc/Parse.h"
 #include "MotionBridgeFootIKComponent.h"
 #include "MotionBridgeReceiverComponent.h"
+#include "MotionBridgeRootMotionCharacter.h"
+#include "MotionBridgeSourcePoseAnimInstance.h"
 #include "UObject/UnrealType.h"
 
 bool UMotionBridgeFootIKAnimInstance::TryGetPreIKBoneTransformWorld(
@@ -67,6 +69,7 @@ void UMotionBridgeFootIKAnimInstance::NativeUpdateAnimation(
         CacheOwnerAndComponent();
     }
     UpdateRealtimePose();
+    UpdateRuntimeRetargetState();
 
     if (!CharacterOwner || !FootIKComponent)
     {
@@ -80,6 +83,11 @@ void UMotionBridgeFootIKAnimInstance::NativeUpdateAnimation(
     {
         return;
     }
+    const AMotionBridgeRootMotionCharacter* MotionCharacter =
+        Cast<AMotionBridgeRootMotionCharacter>(CharacterOwner);
+    const bool bIsRetargetProbe =
+        MotionCharacter &&
+        Mesh == MotionCharacter->GetRuntimeRetargetProbeMesh();
 
     const FTransform& ComponentToWorld = Mesh->GetComponentTransform();
     const FMotionBridgeFootIKState& LeftState =
@@ -129,7 +137,8 @@ void UMotionBridgeFootIKAnimInstance::NativeUpdateAnimation(
 
     // 自动验收时可用同一动画、同一相机关闭 Foot IK，生成严格的 A/B 对照图。
     // 该开关只在显式命令行参数存在时生效，不改变正常运行配置。
-    if (FParse::Param(FCommandLine::Get(), TEXT("MotionBridgeDisableFootIK")))
+    if (bIsRetargetProbe ||
+        FParse::Param(FCommandLine::Get(), TEXT("MotionBridgeDisableFootIK")))
     {
         PelvisOffsetCS = FVector::ZeroVector;
         LeftFootAlpha = 0.0f;
@@ -151,6 +160,34 @@ void UMotionBridgeFootIKAnimInstance::CacheOwnerAndComponent()
     ReceiverComponent = CharacterOwner
         ? CharacterOwner->FindComponentByClass<UMotionBridgeReceiverComponent>()
         : nullptr;
+    const AMotionBridgeRootMotionCharacter* MotionCharacter =
+        Cast<AMotionBridgeRootMotionCharacter>(CharacterOwner);
+    RetargetSourceMeshComponent = MotionCharacter
+        ? MotionCharacter->GetRuntimeRetargetSourceMesh()
+        : nullptr;
+    RetargetProbeMeshComponent = MotionCharacter
+        ? MotionCharacter->GetRuntimeRetargetProbeMesh()
+        : nullptr;
+}
+
+void UMotionBridgeFootIKAnimInstance::UpdateRuntimeRetargetState()
+{
+    bRuntimeRetargetValid = false;
+    if (!RetargetSourceMeshComponent || !RetargetProbeMeshComponent)
+    {
+        return;
+    }
+
+    const UMotionBridgeSourcePoseAnimInstance* SourceAnimInstance =
+        Cast<UMotionBridgeSourcePoseAnimInstance>(
+            RetargetSourceMeshComponent->GetAnimInstance());
+    const AMotionBridgeRootMotionCharacter* MotionCharacter =
+        Cast<AMotionBridgeRootMotionCharacter>(CharacterOwner);
+    bRuntimeRetargetValid =
+        SourceAnimInstance &&
+        MotionCharacter &&
+        MotionCharacter->ShouldUseRuntimeRetargetPipeline() &&
+        SourceAnimInstance->IsSourcePoseValid();
 }
 
 

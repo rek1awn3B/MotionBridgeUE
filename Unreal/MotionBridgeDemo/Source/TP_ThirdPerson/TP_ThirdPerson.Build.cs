@@ -8,6 +8,6 @@ public class TP_ThirdPerson : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AnimGraphRuntime", "Json", "Networking", "Sockets", "WebSockets", "UMG", "Slate", "SlateCore" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AnimGraphRuntime", "IKRig", "Json", "Networking", "Sockets", "WebSockets", "UMG", "Slate", "SlateCore" });
 	}
 }

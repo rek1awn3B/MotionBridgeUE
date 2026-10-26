@@ -26,3 +26,7 @@ for the public MotionBridge demo.
 The excerpt keeps the source skeleton, channel order, and motion samples
 unchanged. MotionBridge adds its own virtual root only in generated build
 artifacts.
+
+The research-only SFU motion previously used during local iteration is not
+distributed. See `THIRD_PARTY_NOTICES.md` for the archive policy and source
+terms.

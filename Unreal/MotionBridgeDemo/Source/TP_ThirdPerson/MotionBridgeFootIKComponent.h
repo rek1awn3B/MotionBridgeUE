@@ -97,6 +97,7 @@ public:
         WeightResponseSpeed = 16.0f;
         FootLockReleaseResponseSpeed = 8.0f;
         MaxHorizontalFootLockCorrection = 6.0f;
+        ContactSafetyMargin = 8.5f;
     }
 
     UFUNCTION(BlueprintPure, Category = "MotionBridge|Foot IK")

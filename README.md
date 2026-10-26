@@ -1,75 +1,79 @@
 # MotionBridge UE
 
-MotionBridge UE 是一个实时角色动画系统，覆盖 BVH 数据解析、UE5 Manny 动作重定向、Root Motion、Foot IK，以及 Python → Unreal 的 UDP/WebSocket 实时驱动、断线重连、UMG 监控和 Morph Target 控制。
+MotionBridge UE 是一套从原始 BVH 到 UE5 Manny 的实时动画数据桥。Python 在启动时解析 BVH、计算源骨架局部/全局姿势并映射到 Manny；运行期间按约 60 Hz 经 WebSocket 发送姿势帧。Unreal C++ 负责消息校验、线程交接、缓冲插值、Pose Snapshot、角色 Root Motion、Foot IK、断线恢复和状态监控。
 
-![BVH 动作重定向到 UE5 Manny](artifacts/ue_manny_retarget_contact.png)
+> 验证环境：Unreal Engine 5.6、Visual Studio 2022、Python 3.12。
 
-[![WebSocket 实时驱动 UE5 Manny](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png)](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)
-
-上图可点击播放实际运行录像：Python 以约 60 Hz 发送 89 骨骼姿态，UE 完成 WebSocket 接收、缓冲、插值、Pose Snapshot、Root Motion 与 Foot IK。录像结尾的瞬间回退来自有限动作片段循环，并非网络断线或丢帧。
+![BVH 动作驱动 UE5 Manny](artifacts/ue_manny_retarget_contact.png)
 
 English documentation: [README_EN.md](README_EN.md)
 
-## 项目亮点
-
-- 实现 BVH tokenizer/parser、通道解码和 FK，并验证旋转顺序、骨长与逐帧世界姿势。
-- 使用 Blender 与 UE IK Retargeter 将公开 BVH 动作重定向到 UE5 Manny，并保留可复现的导入脚本与资产。
-- 将 `Hips` 拆成地面 `MotionRoot` 与局部骨盆动作；逐帧重建证明拆分前后世界姿势一致。
-- 运行时由 `CharacterMovement` 消费 Root Motion，避免“网格移动、胶囊不动”和 root 双重消费。
-- C++ Foot IK 使用脚跟/脚尖双射线、骨盆补偿、Two Bone IK、地面法线对齐和与帧率无关的平滑。
-- UDP 与 WebSocket 共用同一套版本化 JSON 解析、质量检查、有界缓冲、插值采样和统计接口。
-- 网络回调只入队，UE 对象与动画状态统一在游戏线程修改；支持超时回退、重连和首帧 root 基准重建。
-- 通过标量通道实时驱动 `Smile`、`JawOpen`、`BlinkLeft`、`BlinkRight` Morph Target。
-- 原生 C++ UMG 面板显示连接状态、输入频率、游戏帧率、端到端延迟、丢帧、乱序、缓冲延迟与重连次数。
-- 另有最小第三人称客户端冒烟测试，覆盖输入配置、相机、移动、跳跃、落地和动画实例。
-
-## 系统结构
+## 现在实际运行的链路
 
 ```text
-离线动作链路
-BVH -> Parser/Decoder/FK -> 数值与骨长验证 -> 骨架可视化
-  \-> Blender/FBX -> UE Source Skeleton -> IK Retargeter -> Manny AnimSequence
-                                               \-> Root Motion -> CharacterMovement
-                                               \-> Foot IK -> AnimGraph
-
-实时链路
-Python UDP / WebSocket Server
-        -> 网络线程或 WebSocket 回调
-        -> MPSC 原始消息队列
-        -> 游戏线程 JSON 校验与时间排序缓冲
-        -> 插值采样
-           ├─ 骨骼局部姿势 -> Pose Snapshot -> AnimGraph
-           ├─ Root Motion -> CharacterMovement
-           └─ 标量通道 -> Morph Target Driver
-        -> C++ UMG 状态面板与自动验收日志
+Neutral_FW_frames_530_694.bvh
+  -> 自研 BVH tokenizer / parser / 通道解码 / FK
+  -> 源坐标系校准
+  -> 逐帧计算源骨骼全局旋转
+  -> 固定骨架对校准：R_target_global = A * R_source_global * B
+  -> 按 Manny 父子关系还原局部旋转
+  -> 89 骨 Manny 姿势帧 + 独立角色 Root Motion
+  -> WebSocket
+  -> UE 原始消息队列（网络回调）
+  -> 游戏线程校验、按时间排序与插值
+  -> Pose Snapshot + CharacterMovement + Foot IK
 ```
+
+实时服务的默认输入只有：
+
+- 原始 BVH：`data/bvh/100style/Neutral_FW_frames_530_694.bvh`
+- 源坐标校准：`data/calibration/100style_source_calibration.json`
+- 100STYLE 源骨架到 Manny 的固定校准：`data/calibration/100style_to_manny_calibration.json`
+
+`artifacts/realtime/source_reference_stream.json` 和 `manny_root_motion_stream.json` 只用于离线生成、复核校准参数，实时服务不读取其中任何目标姿势帧。也就是说，运行时发出的每一帧 Manny 动作都由当前 BVH 帧计算得到，不是回放一份预先导出的 Manny 动画。
+
+## 骨架映射如何工作
+
+校准脚本使用一组时间对齐的源/目标参考动作，为 26 个主要目标骨骼拟合固定的双边旋转映射：
+
+```text
+R_target_global = A_j * R_source_global * B_j
+R_target_local  = inverse(R_target_parent_global) * R_target_global
+```
+
+运行时只使用保存下来的常量 `A_j`、`B_j`，不查询目标动画。Manny 的扭转骨、手指和 IK 辅助骨没有对应 BVH 通道，因此保持目标参考姿势；数据包仍包含完整的 89 骨顺序。当前 100STYLE 片段上的最大校准旋转误差为 `7.157°`，最差骨骼为 `foot_l`，随后由 Foot IK 处理地面接触。
+
+这是一套针对“100STYLE 骨架 → UE5 Manny”标定的运行时映射，并非任意骨架自动重定向器。换用新的捕捉骨架或目标角色时，需要重新建立骨骼对应并生成校准文件。算法、映射表、生成脚本和误差数据均保存在仓库中，详见 [运行时骨架映射](docs/runtime_bvh_to_manny.md)。
+
+## 主要实现
+
+- 自研 BVH tokenizer/parser、通道解码和 FK，不依赖现成 BVH 解析库。
+- 将 BVH 根轨迹拆为角色水平位移/朝向与骨盆局部动作，避免网格移动而胶囊不动或 root 被重复消费。
+- UDP 与 WebSocket 共用版本化 JSON 校验、有界缓冲、时间排序、插值采样和统计接口。
+- 网络回调只写入 MPSC 队列，UObject、角色与动画状态只在游戏线程修改。
+- C++ Foot IK 使用脚跟/脚尖射线、骨盆补偿、Two Bone IK、地面法线对齐和与帧率无关的平滑。
+- 支持超时回退、WebSocket 自动重连以及重连后的 Root Motion 基准重建。
+- C++ UMG 面板显示连接状态、输入频率、FPS、延迟、异常帧、缓冲和重连次数。
+- 四个标量通道可驱动测试头像的 `Smile`、`JawOpen`、`BlinkLeft`、`BlinkRight` Morph Target；该头像只用于接口验收。
+- 仓库还保留 Blender/FBX/UE IK Retargeter 的离线资产制作流程，用于对照验证，不是当前实时服务的运行依赖。
 
 ## 已验证结果
 
 | 项目 | 结果 |
 | --- | --- |
-| Python 自动测试 | 50/50 通过 |
-| C++ 动画与实时系统测试 | 7/7 编译并以退出码 0 运行 |
+| Python 完整测试 | 55/55 通过 |
+| 原始 BVH → Manny 单元测试 | 165 帧；输出 89 骨；运行时不读取目标姿势流 |
+| 固定骨架对校准 | 动态映射 26 个主骨；最大旋转误差 `7.157°`（`foot_l`） |
 | UE 5.6 Game / Editor Target | 编译通过 |
-| UDP 完整 Manny 姿势流 | 89 骨骼、69 帧，旋转/位移误差均为 `0.000` |
-| UDP 断流恢复 | 观察到在线→超时→恢复；重连首帧位移 `0.000 cm` |
-| WebSocket 实时姿态 | `59.99 Hz`、89 骨骼；姿态快照已应用到 Manny，脊柱误差 `0.000°` |
-| WebSocket 自动重连 | 服务端每 50 帧主动断开，UE 完成 3 次重连并恢复 89 骨骼姿态 |
-| Morph Target | 4/4 通道映射，缺失 0，自动验收 PASS |
-| Root Motion | 输入水平跨度 `91.866 cm`；Actor/胶囊实测 `91.736 cm` |
-| 10° 斜坡 Foot IK | 双脚倾角 `10.000°`；鞋底最小间隙 `+0.194 / +0.200 cm` |
-| 第三人称冒烟测试 | 配置、移动、跳跃、离地和落地全部 PASS |
+| WebSocket 实时姿态 | 89 骨；拒绝帧 0；Pose Snapshot 已应用；脊柱误差 `0.000°` |
+| WebSocket 自动重连 | 服务端每 50 帧断开；UE 完成 3 次重连并恢复姿势流 |
+| 运行时 Foot IK | 左右鞋底最小间隙 `+0.867 / +1.012 cm` |
+| Morph Target | 4/4 通道映射，缺失 0 |
+| Root Motion | 由角色 Actor/胶囊消费，不在骨架 root 中重复应用 |
 
-完整证据与命令见 [最终验收报告](docs/final_acceptance.md)。
+命令、完整日志字段与限制见 [最终验收报告](docs/final_acceptance.md)。
 
 ## 快速运行
-
-### 1. 环境
-
-- Unreal Engine 5.6
-- Visual Studio 2022，安装“使用 C++ 的游戏开发”
-- Python 3.12
-- Blender 5.x（仅重新生成/导入资产时需要）
 
 安装 Python 依赖：
 
@@ -77,89 +81,56 @@ Python UDP / WebSocket Server
 py -3.12 -m pip install -r requirements.txt
 ```
 
-如果本机没有 UE Third Person 模板资源，先复制 Epic 模板依赖（请按实际安装位置修改 `EngineRoot`）：
+本机若没有 UE Third Person 模板资源，先复制 Epic 模板依赖（这些资源不提交到仓库）：
 
 ```powershell
-.\scripts\setup_unreal_demo.ps1 -EngineRoot "C:\Program Files\Epic Games\UE_5.6"
+.\scripts\setup_unreal_demo.ps1 -EngineRoot "D:\Program Files\Epic Games\UE_5.6"
 ```
 
-仓库保留 `Content/MotionBridge` 下的项目资产；Manny、Quinn 等 Epic 模板资源由安装脚本从本机 UE 安装目录复制。
-
-### 2. 一键实时演示
-
-骨骼实时流：
+启动原始 BVH → Manny 实时演示：
 
 ```powershell
 .\scripts\run_websocket_demo.ps1
 ```
 
-Morph Target 表情流：
+运行端到端 WebSocket、重连、Foot IK 与 Morph Target 验收：
 
 ```powershell
-.\scripts\run_websocket_demo.ps1 -FacialDemo
+.\scripts\run_realtime_acceptance.ps1
 ```
 
-若 UE 不在自动检测路径下，传入 `-EngineRoot`。
-
-### 3. 构建与单元验收
+仅运行这条实时转换链的 Python 测试：
 
 ```powershell
-.\scripts\run_acceptance.ps1
+py -3.12 -m unittest discover -s python -p "test_bvh_stream.py" -v
 ```
 
-它会从零配置 CMake、运行 50 项 Python 测试、编译并执行 7 个 C++
-动画与实时系统测试，同时编译 UE Game 与 Editor Target。没有 UE 时可用
-`-SkipUnreal`。
-
-需要连同 WebSocket 稳态、自动重连和 Morph Target 一起启动 UE 做端到端
-回归时运行：
+重新生成两级校准：
 
 ```powershell
-.\scripts\run_acceptance.ps1 -RunRealtime
+py -3.12 python\build_bvh_source_calibration.py
+py -3.12 python\build_manny_retarget_calibration.py
 ```
 
-## 手动运行实时服务
+## 目录定位
 
-```powershell
-py -3.12 tools\motionbridge_websocket_server.py
-```
+- `python/bvh_stream.py`：原始 BVH 到源姿势、再到 Manny 姿势的运行时计算。
+- `python/build_bvh_source_calibration.py`：BVH 坐标系和源骨架校准。
+- `python/build_manny_retarget_calibration.py`：源/目标固定骨架对映射拟合与误差验证。
+- `tools/motionbridge_websocket_server.py`：实时服务、循环时间戳和测试表情通道。
+- `Unreal/MotionBridgeDemo/Source/TP_ThirdPerson/`：UE 接收、缓冲、角色驱动、Foot IK、Morph 与监控实现。
+- `scripts/run_realtime_acceptance.ps1`：端到端自动验收。
+- `docs/`：离线流程、实时协议和实现记录。
 
-表情通道模式：
+## 项目边界
 
-```powershell
-py -3.12 tools\motionbridge_websocket_server.py --facial-demo
-```
+- 当前输入是仓库中的 BVH 片段循环，不是硬件动捕设备；更换为设备输入时可复用转换、传输和 UE 消费层。
+- 当前映射只针对 100STYLE 源骨架与 UE5 Manny，不能直接宣称支持任意骨架。
+- 26 个主要骨骼由 BVH 动态驱动；Manny 特有的扭转骨、手指和 IK 辅助骨保持参考姿势。
+- Morph 通道是确定性测试信号，不包含面捕或语音驱动模型。
+- 延迟数据来自同机回环环境，不代表跨机器部署。
+- 不包含既有科研项目的保密代码或资产。
 
-默认地址为 `ws://127.0.0.1:8765/`。UE 可通过 `-MotionBridgeWebSocketUrl=ws://host:port/` 覆盖。配置已明确让 localhost 绕过系统 HTTP 代理，避免本机 WebSocket 被代理端口截获。
+## 数据与许可
 
-## 演示素材
-
-- [WebSocket 实时驱动 Manny（最终录像）](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.mp4)
-- [WebSocket 实时驱动截图](artifacts/candidates/MotionBridge_WebSocket_Manny_Final.png)
-- [Manny 重定向视频](artifacts/ue_manny_retarget.mp4)
-- [Manny 重定向接触图](artifacts/ue_manny_retarget_contact.png)
-- [实时表情与监控截图](artifacts/MotionBridge_RealtimeFacial.png)
-- `artifacts/bvh_animation.mp4`：BVH 解析与 FK 输出。
-
-## 文档索引
-
-- [系统架构](docs/architecture.md)
-- [Blender / UE 重定向](docs/retargeting_pipeline.md)
-- [Root Motion](docs/root_motion.md)
-- [Foot IK](docs/foot_ik.md)
-- [实时姿势传输](docs/realtime_streaming.md)
-- [第三人称客户端](docs/third_person_client.md)
-- [UMG、WebSocket 与 Morph Target](docs/realtime_ui_websocket_morph.md)
-- [最终验收报告](docs/final_acceptance.md)
-- [第三方素材与授权说明](THIRD_PARTY_NOTICES.md)
-
-## 实现范围
-
-- 项目实现 BVH/FK、Root Motion、运行时接收与缓冲、线程交接、Foot IK、状态监控和 Morph 通道驱动。
-- 跨骨架动作映射使用 Unreal Engine IK Retargeter。
-- 公开动作样本来自 CC BY 4.0 的 100STYLE；延迟数据来自同机回环测试。
-
-## License
-
-项目代码使用 [MIT License](LICENSE)。第三方数据和 Epic Games 资产适用各自
-条款，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+公开动作使用 CC BY 4.0 的 100STYLE 数据。项目自研代码使用 [MIT License](LICENSE)；第三方数据和 Epic Games 资产适用各自条款，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -11,6 +11,16 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+import sys
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+PYTHON_DIRECTORY = REPOSITORY_ROOT / "python"
+if str(PYTHON_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(PYTHON_DIRECTORY))
+
+from bvh_stream import build_manny_stream_from_bvh, build_stream_from_bvh
+
 
 FACIAL_CHANNELS = ["Smile", "JawOpen", "BlinkLeft", "BlinkRight"]
 
@@ -50,6 +60,9 @@ def build_stream_definition(
         channels = FACIAL_CHANNELS.copy()
     if channels:
         definition["channels"] = channels
+    for metadata_key in ("source_format", "source_file", "retarget_mode"):
+        if stream.get(metadata_key):
+            definition[metadata_key] = str(stream[metadata_key])
     return definition
 
 
@@ -158,7 +171,15 @@ async def run_server(args: argparse.Namespace) -> None:
             "missing dependency: run `python -m pip install -r requirements.txt`"
         ) from error
 
-    stream = load_stream(args.stream_file)
+    stream = (
+        load_stream(args.stream_file)
+        if args.stream_file is not None
+        else build_manny_stream_from_bvh(
+            args.bvh_file,
+            args.calibration_file,
+            args.manny_calibration_file,
+        )
+    )
 
     async def handler(websocket: Any) -> None:
         try:
@@ -182,16 +203,52 @@ async def run_server(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    default_stream = (
-        Path(__file__).resolve().parents[1]
-        / "artifacts"
-        / "realtime"
-        / "manny_root_motion_stream.json"
+    default_bvh = (
+        REPOSITORY_ROOT
+        / "data"
+        / "bvh"
+        / "100style"
+        / "Neutral_FW_frames_530_694.bvh"
+    )
+    default_calibration = (
+        REPOSITORY_ROOT
+        / "data"
+        / "calibration"
+        / "100style_source_calibration.json"
+    )
+    default_manny_calibration = (
+        REPOSITORY_ROOT
+        / "data"
+        / "calibration"
+        / "100style_to_manny_calibration.json"
     )
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--stream-file", type=Path, default=default_stream)
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
+        "--bvh-file",
+        type=Path,
+        default=default_bvh,
+        help="实时解析并发送的原始 BVH；这是默认输入",
+    )
+    source.add_argument(
+        "--stream-file",
+        type=Path,
+        help="兼容旧测试或自定义设备适配器的预生成 JSON 流",
+    )
+    parser.add_argument(
+        "--calibration-file",
+        type=Path,
+        default=default_calibration,
+        help="BVH 关节坐标到 UE 源骨架坐标的标定文件",
+    )
+    parser.add_argument(
+        "--manny-calibration-file",
+        type=Path,
+        default=default_manny_calibration,
+        help="UE 源骨架到 Manny 局部关节坐标的公开标定文件",
+    )
     parser.add_argument(
         "--once",
         action="store_true",

@@ -9,6 +9,8 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "MotionBridgeFootIKAnimInstance.h"
+#include "MotionBridgeRootMotionCharacter.h"
+#include "MotionBridgeSourcePoseAnimInstance.h"
 #include "UnrealClient.h"
 
 UMotionBridgeFootIKComponent::UMotionBridgeFootIKComponent()
@@ -52,6 +54,17 @@ void UMotionBridgeFootIKComponent::BeginPlay()
     PrimaryComponentTick.AddPrerequisite(
         CharacterMesh,
         CharacterMesh->PrimaryComponentTick);
+    if (const AMotionBridgeRootMotionCharacter* MotionCharacter =
+            Cast<AMotionBridgeRootMotionCharacter>(CharacterOwner))
+    {
+        if (USkeletalMeshComponent* RetargetProbe =
+                MotionCharacter->GetRuntimeRetargetProbeMesh())
+        {
+            PrimaryComponentTick.AddPrerequisite(
+                RetargetProbe,
+                RetargetProbe->PrimaryComponentTick);
+        }
+    }
 
     UE_LOG(LogTemp, Display, TEXT("MOTIONBRIDGE_FOOT_IK=READY"));
 }
@@ -80,10 +93,11 @@ void UMotionBridgeFootIKComponent::TickComponent(
             float& InOutMinClearance,
             int32& InOutSampleCount)
         {
-            // 支撑期很短且释放经过平滑时，权重峰值可能只有约 0.88。
-            // 0.85 已经足以检查最终脚底姿势，同时避免验收误报“没有样本”。
+            // 网络姿势在验收窗口内只覆盖很短的支撑期，锁定权重又刻意
+            // 平滑渐入。0.60 已经会让 Two Bone IK 产生可测的最终姿势，
+            // 同时避免 2 秒自动验收在权重尚未升到 0.85 时误报无样本。
             if (!State.bPositionLocked ||
-                State.PositionLockAlpha < 0.85f)
+                State.PositionLockAlpha < 0.60f)
             {
                 return;
             }
@@ -145,9 +159,9 @@ void UMotionBridgeFootIKComponent::TickComponent(
         TEXT("R"));
 
     // 射线命中只能证明脚下方存在地面，不能证明这只脚正在支撑身体。
-    // 没有动画接触曲线时，用两个可观测条件近似支撑相：整只鞋底接近地面，
-    // 并且脚骨沿支撑面法线方向近似静止。沿斜坡切线向前移动不等于离地；
-    // 脚一旦真正远离表面或沿法线快速升降才解锁。
+    // 网络姿势经过 Receiver 插值后在游戏帧上连续采样。这里同时使用鞋底
+    // 离地距离与支撑面法线方向速度判断接触；水平速度不参与门控，因为
+    // 角色 Actor 正在消费根运动，轻微的水平残差应交给脚锁修正。
     const auto DesiredContactWeight =
         [this](const FMotionBridgeFootIKState& State)
         {
@@ -171,17 +185,7 @@ void UMotionBridgeFootIKComponent::TickComponent(
                 (State.AnimatedSpeed - ContactSpeedFadeStart) / SpeedRange,
                 0.0f,
                 1.0f);
-            const float HorizontalSpeedRange = FMath::Max(
-                ContactHorizontalSpeedFadeEnd -
-                    ContactHorizontalSpeedFadeStart,
-                KINDA_SMALL_NUMBER);
-            const float HorizontalSpeedWeight = 1.0f - FMath::Clamp(
-                (State.AnimatedHorizontalSpeed -
-                    ContactHorizontalSpeedFadeStart) /
-                    HorizontalSpeedRange,
-                0.0f,
-                1.0f);
-            return ClearanceWeight * SpeedWeight * HorizontalSpeedWeight;
+            return ClearanceWeight * SpeedWeight;
         };
 
     const float DesiredLeftWeight = DesiredContactWeight(LeftFootState);
@@ -278,13 +282,29 @@ void UMotionBridgeFootIKComponent::TickComponent(
 
     if (bTraceRuntimeFrames)
     {
+        const AMotionBridgeRootMotionCharacter* MotionCharacter =
+            Cast<AMotionBridgeRootMotionCharacter>(CharacterOwner);
+        const USkeletalMeshComponent* SourceMesh = MotionCharacter
+            ? MotionCharacter->GetRuntimeRetargetSourceMesh()
+            : nullptr;
+        const UMotionBridgeSourcePoseAnimInstance* SourceAnim = SourceMesh
+            ? Cast<UMotionBridgeSourcePoseAnimInstance>(
+                SourceMesh->GetAnimInstance())
+            : nullptr;
+        const UMotionBridgeFootIKAnimInstance* TargetAnim =
+            Cast<UMotionBridgeFootIKAnimInstance>(
+                CharacterMesh->GetAnimInstance());
+        const FVector SourceRightFoot = SourceMesh
+            ? SourceMesh->GetSocketLocation(TEXT("RightAnkle"))
+            : FVector::ZeroVector;
         UE_LOG(
             LogTemp,
             Display,
             TEXT("MOTIONBRIDGE_FOOT_IK_FRAME|time=%.4f|actor=%s|")
             TEXT("right_animated=%s|right_target=%s|right_locked_target=%s|")
             TEXT("right_desired=%.3f|right_weight=%.3f|right_grounded=%d|")
-            TEXT("right_locked=%d|right_horizontal_speed=%.3f|right_clearance=%.3f"),
+            TEXT("right_locked=%d|right_horizontal_speed=%.3f|right_clearance=%.3f|")
+            TEXT("runtime_valid=%d|source_valid=%d|source_right_foot=%s"),
             ValidationElapsedSeconds,
             *CharacterOwner->GetActorLocation().ToCompactString(),
             *RightFootState.AnimatedLocation.ToCompactString(),
@@ -295,7 +315,12 @@ void UMotionBridgeFootIKComponent::TickComponent(
             RightFootState.bGrounded ? 1 : 0,
             RightFootState.bPositionLocked ? 1 : 0,
             RightFootState.AnimatedHorizontalSpeed,
-            RightFootState.SoleClearance);
+            RightFootState.SoleClearance,
+            TargetAnim && TargetAnim->IsRuntimeRetargetValid()
+                ? 1
+                : 0,
+            SourceAnim && SourceAnim->IsSourcePoseValid() ? 1 : 0,
+            *SourceRightFoot.ToCompactString());
     }
 
     // 骨盆只参考当前支撑脚。把摆动脚也纳入 Min 会导致骨盆被抬起的
@@ -388,8 +413,8 @@ void UMotionBridgeFootIKComponent::TickComponent(
         const bool bDetectedSupportPhases =
             LeftLockedFrameCount > 0 &&
             RightLockedFrameCount > 0 &&
-            MaxLeftContactWeight >= FootLockEnterWeight &&
-            MaxRightContactWeight >= FootLockEnterWeight;
+            MaxLeftContactWeight >= 0.60f &&
+            MaxRightContactWeight >= 0.60f;
         const bool bFinalSolesStayAboveGround =
             LeftPostIKSampleCount > 0 &&
             RightPostIKSampleCount > 0 &&
@@ -545,13 +570,40 @@ void UMotionBridgeFootIKComponent::UpdateFoot(
     // 那会让上一帧输出重新成为下一帧输入，并把脚锁死在旧的世界坐标。
     // Observe Bone 位于 AnimGraph 的 IK 之前，提供真正的原动画脚位置。
     FTransform AnimatedTransform = FTransform::Identity;
+    const AMotionBridgeRootMotionCharacter* MotionCharacter =
+        Cast<AMotionBridgeRootMotionCharacter>(CharacterOwner);
+    const USkeletalMeshComponent* RetargetProbe = MotionCharacter
+        ? MotionCharacter->GetRuntimeRetargetProbeMesh()
+        : nullptr;
     const UMotionBridgeFootIKAnimInstance* FootIKAnimInstance =
         Cast<UMotionBridgeFootIKAnimInstance>(CharacterMesh->GetAnimInstance());
-    const bool bHasPreIKLocation =
-        FootIKAnimInstance &&
-        FootIKAnimInstance->TryGetPreIKBoneTransformWorld(
+    const UMotionBridgeFootIKAnimInstance* ProbeAnimInstance =
+        RetargetProbe
+            ? Cast<UMotionBridgeFootIKAnimInstance>(
+                RetargetProbe->GetAnimInstance())
+            : nullptr;
+    const bool bUseRetargetProbe =
+        RetargetProbe &&
+        RetargetProbe->GetSkeletalMeshAsset() &&
+        ProbeAnimInstance &&
+        (ProbeAnimInstance->IsRealtimePoseValid() ||
+         ProbeAnimInstance->IsRuntimeRetargetValid());
+    bool bHasPreIKLocation = false;
+    if (bUseRetargetProbe)
+    {
+        AnimatedTransform = RetargetProbe->GetSocketTransform(
             BoneName,
-            AnimatedTransform);
+            RTS_World);
+        bHasPreIKLocation = !AnimatedTransform.ContainsNaN();
+    }
+    else
+    {
+        bHasPreIKLocation =
+            FootIKAnimInstance &&
+            FootIKAnimInstance->TryGetPreIKBoneTransformWorld(
+                BoneName,
+                AnimatedTransform);
+    }
     if (!bHasPreIKLocation)
     {
         // 第一帧 Observe Bone 还没有执行时暂不施加 IK；下一帧即可拿到缓存。
