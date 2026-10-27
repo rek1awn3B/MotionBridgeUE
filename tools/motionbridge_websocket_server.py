@@ -9,7 +9,7 @@ import json
 import math
 import time
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Iterator
 
 import sys
 
@@ -97,33 +97,143 @@ def build_frame_packet(
     return frame
 
 
+def quaternion_yaw(rotation: list[float]) -> float:
+    """提取 UE 四元数的 yaw；Actor 根旋转按协议只包含水平旋转。"""
+
+    x, y, z, w = (float(component) for component in rotation)
+    return math.atan2(
+        2.0 * (w * z + x * y),
+        1.0 - 2.0 * (y * y + z * z),
+    )
+
+
+def yaw_quaternion(yaw: float) -> list[float]:
+    half_yaw = 0.5 * yaw
+    return [0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)]
+
+
+def transform_root_for_loop(
+    frame: dict[str, Any],
+    first_position: list[float],
+    first_yaw: float,
+    cycle_position: list[float],
+    cycle_yaw: float,
+) -> None:
+    """把一轮中的根姿势接到上一轮末尾，避免循环时瞬移回起点。"""
+
+    root_position = frame.get("root_position")
+    root_rotation = frame.get("root_rotation")
+    if not isinstance(root_position, list) or len(root_position) != 3:
+        return
+    if not isinstance(root_rotation, list) or len(root_rotation) != 4:
+        return
+
+    relative_x = float(root_position[0]) - first_position[0]
+    relative_y = float(root_position[1]) - first_position[1]
+    relative_z = float(root_position[2]) - first_position[2]
+    rotation_from_first = cycle_yaw - first_yaw
+    cosine = math.cos(rotation_from_first)
+    sine = math.sin(rotation_from_first)
+    frame["root_position"] = [
+        cycle_position[0] + cosine * relative_x - sine * relative_y,
+        cycle_position[1] + sine * relative_x + cosine * relative_y,
+        cycle_position[2] + relative_z,
+    ]
+    frame_yaw = quaternion_yaw(root_rotation)
+    frame["root_rotation"] = yaw_quaternion(
+        cycle_yaw + frame_yaw - first_yaw
+    )
+
+
+def iter_looped_frames(
+    stream: dict[str, Any],
+    loop_stream: bool,
+    continuous_root: bool = False,
+    continuous_root_cycles: int = 0,
+) -> Iterator[dict[str, Any]]:
+    """按需循环源帧，并可把每一轮根运动连续接到上一轮末尾。"""
+
+    frames = stream["frames"]
+    first_position = [
+        float(component)
+        for component in frames[0].get("root_position", [0.0, 0.0, 0.0])
+    ]
+    first_yaw = quaternion_yaw(
+        frames[0].get("root_rotation", [0.0, 0.0, 0.0, 1.0])
+    )
+    cycle_position = first_position.copy()
+    cycle_yaw = first_yaw
+    completed_cycles = 0
+
+    while True:
+        for source_frame in frames:
+            frame = copy.deepcopy(source_frame)
+            if continuous_root:
+                transform_root_for_loop(
+                    frame,
+                    first_position,
+                    first_yaw,
+                    cycle_position,
+                    cycle_yaw,
+                )
+            yield frame
+        if not loop_stream:
+            break
+        if continuous_root:
+            completed_cycles += 1
+            if (
+                continuous_root_cycles > 0
+                and completed_cycles >= continuous_root_cycles
+            ):
+                cycle_position = first_position.copy()
+                cycle_yaw = first_yaw
+                completed_cycles = 0
+            else:
+                last_frame = copy.deepcopy(frames[-1])
+                transform_root_for_loop(
+                    last_frame,
+                    first_position,
+                    first_yaw,
+                    cycle_position,
+                    cycle_yaw,
+                )
+                cycle_position = [
+                    float(component)
+                    for component in last_frame["root_position"]
+                ]
+                cycle_yaw = quaternion_yaw(last_frame["root_rotation"])
+
+
 async def iter_frame_packets(
     stream: dict[str, Any],
     loop_stream: bool,
     facial_demo: bool,
+    continuous_root: bool = False,
+    continuous_root_cycles: int = 0,
 ) -> AsyncIterator[tuple[dict[str, Any], float]]:
-    frames = stream["frames"]
     fps = float(stream["fps"])
     frame_interval = 1.0 / fps
     output_index = 0
-    while True:
-        for source_frame in frames:
-            timestamp = output_index * frame_interval
-            yield (
-                build_frame_packet(
-                    source_frame,
-                    output_index,
-                    timestamp,
-                    facial_demo,
-                    stream_id=str(
-                        stream.get("stream_id", "motionbridge-websocket")
-                    ),
+    for source_frame in iter_looped_frames(
+        stream,
+        loop_stream,
+        continuous_root,
+        continuous_root_cycles,
+    ):
+        timestamp = output_index * frame_interval
+        yield (
+            build_frame_packet(
+                source_frame,
+                output_index,
+                timestamp,
+                facial_demo,
+                stream_id=str(
+                    stream.get("stream_id", "motionbridge-websocket")
                 ),
-                frame_interval,
-            )
-            output_index += 1
-        if not loop_stream:
-            break
+            ),
+            frame_interval,
+        )
+        output_index += 1
 
 
 async def stream_to_client(
@@ -132,6 +242,8 @@ async def stream_to_client(
     loop_stream: bool,
     facial_demo: bool,
     disconnect_after: int,
+    continuous_root: bool = False,
+    continuous_root_cycles: int = 0,
 ) -> None:
     await websocket.send(
         json.dumps(
@@ -143,13 +255,22 @@ async def stream_to_client(
 
     sent_frames = 0
     next_send_time = asyncio.get_running_loop().time()
+    first_packet: dict[str, Any] | None = None
+    last_packet: dict[str, Any] | None = None
+    last_frame_interval = 0.0
     async for packet, frame_interval in iter_frame_packets(
         stream,
         loop_stream,
         facial_demo,
+        continuous_root,
+        continuous_root_cycles,
     ):
         packet["sent_at_unix_seconds"] = time.time()
         await websocket.send(json.dumps(packet, separators=(",", ":")))
+        if first_packet is None:
+            first_packet = copy.deepcopy(packet)
+        last_packet = copy.deepcopy(packet)
+        last_frame_interval = frame_interval
         sent_frames += 1
         if disconnect_after > 0 and sent_frames >= disconnect_after:
             await websocket.close(1012, "intentional reconnect test")
@@ -159,6 +280,34 @@ async def stream_to_client(
         await asyncio.sleep(
             max(next_send_time - asyncio.get_running_loop().time(), 0.0)
         )
+
+    # 单次演示发送完后，下一帧切回第一帧的根姿势和骨骼姿势，再以递增
+    # 时间戳持续发送。角色因此回到演示原点并停住，不会重新播放，也不会
+    # 因长时间没有新数据而把正常结束误报成 timeout。
+    if (
+        not loop_stream
+        and disconnect_after <= 0
+        and first_packet is not None
+        and last_packet is not None
+        and last_frame_interval > 0.0
+    ):
+        hold_frame_index = int(last_packet["frame_index"])
+        hold_timestamp = float(last_packet["timestamp"])
+        while True:
+            hold_frame_index += 1
+            hold_timestamp += last_frame_interval
+            hold_packet = copy.deepcopy(first_packet)
+            hold_packet["frame_index"] = hold_frame_index
+            hold_packet["timestamp"] = hold_timestamp
+            hold_packet["sent_at_unix_seconds"] = time.time()
+            await websocket.send(
+                json.dumps(hold_packet, separators=(",", ":"))
+            )
+            sent_frames += 1
+            next_send_time += last_frame_interval
+            await asyncio.sleep(
+                max(next_send_time - asyncio.get_running_loop().time(), 0.0)
+            )
 
     print(f"client session ended after {sent_frames} frames", flush=True)
 
@@ -189,6 +338,8 @@ async def run_server(args: argparse.Namespace) -> None:
                 not args.once,
                 args.facial_demo,
                 args.disconnect_after,
+                args.continuous_root,
+                args.continuous_root_cycles,
             )
         except Exception as error:  # 客户端主动退出属于正常实时流生命周期。
             print(f"client disconnected: {error}", flush=True)
@@ -208,7 +359,7 @@ def parse_args() -> argparse.Namespace:
         / "data"
         / "bvh"
         / "100style"
-        / "Neutral_FW_frames_530_694.bvh"
+        / "Neutral_FW_frames_470_694.bvh"
     )
     default_calibration = (
         REPOSITORY_ROOT
@@ -252,7 +403,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--once",
         action="store_true",
-        help="发送一遍后停止当前客户端会话；服务仍继续等待新连接",
+        help="只发送一遍，然后回到第一帧并保持连接",
     )
     parser.add_argument(
         "--facial-demo",
@@ -265,7 +416,21 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="发送指定帧数后主动断开，用于验证 UE 自动重连",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--continuous-root",
+        action="store_true",
+        help="循环动作时累计根位移与朝向，使角色持续向前而不是返回起点",
+    )
+    parser.add_argument(
+        "--continuous-root-cycles",
+        type=int,
+        default=0,
+        help="连续累计指定轮数后回到原点；0 表示永不自动重置",
+    )
+    args = parser.parse_args()
+    if args.continuous_root_cycles < 0:
+        parser.error("--continuous-root-cycles must be non-negative")
+    return args
 
 
 def main() -> None:

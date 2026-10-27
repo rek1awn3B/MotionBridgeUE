@@ -148,7 +148,9 @@ void AMotionBridgeDemoGameMode::BeginPlay()
         FRotator::ZeroRotator);
     if (Floor)
     {
-        Floor->SetActorScale3D(FVector(3.0f, 8.0f, 0.1f));
+        // 公开演示使用带 Root Motion 的直走片段。保留足够大的平地，方便
+        // 从侧面和正面检查完整轨迹与脚底接触。
+        Floor->SetActorScale3D(FVector(12.0f, 12.0f, 0.1f));
         UStaticMesh* Cube = LoadObject<UStaticMesh>(
             nullptr,
             TEXT("/Engine/BasicShapes/Cube.Cube"));

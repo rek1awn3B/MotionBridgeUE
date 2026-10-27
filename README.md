@@ -11,7 +11,7 @@ English documentation: [README_EN.md](README_EN.md)
 ## 现在实际运行的链路
 
 ```text
-Neutral_FW_frames_530_694.bvh
+Neutral_FW_frames_470_694.bvh
   -> 自研 BVH tokenizer / parser / 通道解码 / FK
   -> 源坐标系校准
   -> 逐帧计算源骨骼全局旋转
@@ -26,7 +26,7 @@ Neutral_FW_frames_530_694.bvh
 
 实时服务的默认输入只有：
 
-- 原始 BVH：`data/bvh/100style/Neutral_FW_frames_530_694.bvh`
+- 原始 BVH：`data/bvh/100style/Neutral_FW_frames_470_694.bvh`
 - 源坐标校准：`data/calibration/100style_source_calibration.json`
 - 100STYLE 源骨架到 Manny 的固定校准：`data/calibration/100style_to_manny_calibration.json`
 
@@ -61,13 +61,13 @@ R_target_local  = inverse(R_target_parent_global) * R_target_global
 
 | 项目 | 结果 |
 | --- | --- |
-| Python 完整测试 | 55/55 通过 |
-| 原始 BVH → Manny 单元测试 | 165 帧；输出 89 骨；运行时不读取目标姿势流 |
+| Python 完整测试 | 57/57 通过 |
+| 原始 BVH → Manny 单元测试 | 165 帧校准片段；输出 89 骨；运行时不读取目标姿势流 |
 | 固定骨架对校准 | 动态映射 26 个主骨；最大旋转误差 `7.157°`（`foot_l`） |
 | UE 5.6 Game / Editor Target | 编译通过 |
 | WebSocket 实时姿态 | 89 骨；拒绝帧 0；Pose Snapshot 已应用；脊柱误差 `0.000°` |
 | WebSocket 自动重连 | 服务端每 50 帧断开；UE 完成 3 次重连并恢复姿势流 |
-| 运行时 Foot IK | 左右鞋底最小间隙 `+0.009 / +0.004 cm`；平地步态无持续屈膝 |
+| 运行时 Foot IK | 左右鞋底最小间隙 `+0.193 / +0.207 cm`；平地步态无持续屈膝 |
 | Morph Target | 4/4 通道映射，缺失 0 |
 | Root Motion | 由角色 Actor/胶囊消费，不在骨架 root 中重复应用 |
 
@@ -92,6 +92,9 @@ py -3.12 -m pip install -r requirements.txt
 ```powershell
 .\scripts\run_websocket_demo.ps1
 ```
+
+默认演示使用未经插帧或拼接的 470–694 帧（约 3.75 秒）直走片段；
+每轮结束后角色回到起点继续播放。演示地面为 12 m × 12 m。
 
 正面检查左右腿和屈膝情况，或关闭 Foot IK 做 A/B 对照：
 

@@ -123,8 +123,16 @@ void UMotionBridgeFootIKAnimInstance::NativeUpdateAnimation(
     RightFootRotationCS = BuildFootTargetRotationCS(RightState);
 
     const FVector KneeDirectionWorld = CharacterOwner->GetActorForwardVector();
-    const FVector LeftKneeWorld = Mesh->GetSocketLocation(LeftKneeBone);
-    const FVector RightKneeWorld = Mesh->GetSocketLocation(RightKneeBone);
+    // 膝盖辅助目标必须来自未经过 Foot IK 的探针姿势。若读取可见 Mesh，
+    // 上一帧 Two Bone IK 修改后的膝盖位置会成为下一帧输入，形成反馈并在
+    // 支撑脚切换时产生可见的腿部弹跳。
+    const USkeletalMeshComponent* KneePoseMesh = RetargetProbeMeshComponent
+        ? RetargetProbeMeshComponent.Get()
+        : Mesh;
+    const FVector LeftKneeWorld =
+        KneePoseMesh->GetSocketLocation(LeftKneeBone);
+    const FVector RightKneeWorld =
+        KneePoseMesh->GetSocketLocation(RightKneeBone);
     LeftKneeTargetCS = ComponentToWorld.InverseTransformPosition(
         LeftKneeWorld + KneeDirectionWorld * KneeTargetDistance);
     RightKneeTargetCS = ComponentToWorld.InverseTransformPosition(

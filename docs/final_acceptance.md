@@ -1,6 +1,6 @@
 # MotionBridge UE 最终验收报告
 
-验收日期：2026-10-26（Asia/Shanghai）
+验收日期：2026-10-27（Asia/Shanghai）
 
 ## 结论
 
@@ -25,13 +25,13 @@ raw BVH
 
 | 层级 | 验收内容 | 结果 |
 | --- | --- | --- |
-| Python | `unittest discover` | PASS，55/55 |
+| Python | `unittest discover` | PASS，57/57 |
 | Python | 原始 BVH 到规范源姿势 | PASS，165 帧、25 源骨 |
 | Python | 规范源姿势到 Manny | PASS，89 目标骨、26 个动态映射 |
 | Python | 校准数值 | PASS，最大旋转误差 `7.157°`，最差 `foot_l` |
 | UE | `MBEditor` Win64 Development | Succeeded |
 | WebSocket | 原始 BVH 转换后的 89 骨姿势 | PASS，拒绝帧 0，直接 Manny Pose Snapshot |
-| Foot IK | 平地运行时后处理 | PASS，左右鞋底最小间隙均为正；取消骨盆下压并将接触余量校准为 `4.5 cm`，避免持续屈膝 |
+| Foot IK | 平地运行时后处理 | PASS，左右鞋底最小间隙均为正；恢复角色网格高度并将接触余量校准为 `0.2 cm`，避免持续屈膝 |
 | WebSocket | 每 50 帧强制断线 | PASS，自动重连 3 次并恢复姿势流 |
 | Morph | 四通道实时驱动 | PASS，映射 4、缺失 0 |
 
@@ -64,11 +64,11 @@ Build.bat MBEditor Win64 Development MotionBridgeDemo.uproject -WaitMutex -NoHot
 
 ```text
 MOTIONBRIDGE_WEBSOCKET_TEST=PASS
-messages=158
+messages=162
 rejected=0
-accepted=157
-input_hz=61.00
-game_fps=60.00
+accepted=161
+input_hz=59.46
+game_fps=48.56
 pose_applied=1
 direct_manny_pose=1
 runtime_retarget=0
@@ -77,8 +77,8 @@ snapshot_bones=89
 spine_error_deg=0.000
 
 MOTIONBRIDGE_RUNTIME_FOOT_IK=PASS
-min_left_post_ik_clearance=0.009
-min_right_post_ik_clearance=0.004
+min_left_post_ik_clearance=0.193
+min_right_post_ik_clearance=0.207
 ```
 
 `runtime_retarget=0` 不是省略重定向：它表示 UE 没有再运行另一套跨组件 Retarget 节点；骨架对映射已由 Python 根据当前原始 BVH 帧计算完成。计算方法和校准边界见 [原始 BVH 到 Manny 的运行时骨架映射](runtime_bvh_to_manny.md)。

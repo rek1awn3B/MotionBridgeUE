@@ -13,7 +13,7 @@ $ProjectPath = Join-Path $RepositoryRoot `
 $ServerPath = Join-Path $RepositoryRoot `
     "tools\motionbridge_websocket_server.py"
 $BvhPath = Join-Path $RepositoryRoot `
-    "data\bvh\100style\Neutral_FW_frames_530_694.bvh"
+    "data\bvh\100style\Neutral_FW_frames_470_694.bvh"
 $CalibrationPath = Join-Path $RepositoryRoot `
     "data\calibration\100style_source_calibration.json"
 $MannyCalibrationPath = Join-Path $RepositoryRoot `

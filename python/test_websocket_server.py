@@ -1,5 +1,5 @@
-import asyncio
 import importlib.util
+import itertools
 import math
 import unittest
 from pathlib import Path
@@ -80,18 +80,21 @@ class WebSocketServerTests(unittest.TestCase):
     def test_non_looping_packet_iterator_is_monotonic(self):
         stream = sample_stream()
         stream["frames"] = stream["frames"] * 3
-
-        async def collect():
-            result = []
-            async for packet, interval in SERVER.iter_frame_packets(
-                stream,
-                loop_stream=False,
-                facial_demo=False,
-            ):
-                result.append((packet, interval))
-            return result
-
-        packets = asyncio.run(collect())
+        interval = 1.0 / stream["fps"]
+        packets = [
+            (
+                SERVER.build_frame_packet(
+                    source_frame,
+                    frame_index,
+                    frame_index * interval,
+                    stream_id=stream["stream_id"],
+                ),
+                interval,
+            )
+            for frame_index, source_frame in enumerate(
+                SERVER.iter_looped_frames(stream, loop_stream=False)
+            )
+        ]
         self.assertEqual(
             [packet["frame_index"] for packet, _ in packets],
             [0, 1, 2],
@@ -105,4 +108,74 @@ class WebSocketServerTests(unittest.TestCase):
         )
         self.assertTrue(
             all(packet["stream_id"] == "test" for packet, _ in packets)
+        )
+
+    def test_continuous_root_accumulates_motion_across_loops(self):
+        stream = sample_stream()
+        stream["frames"] = [
+            {
+                **stream["frames"][0],
+                "root_position": [0.0, 0.0, 0.0],
+            },
+            {
+                **stream["frames"][0],
+                "root_position": [0.0, 100.0, 0.0],
+            },
+        ]
+
+        packets = list(
+            itertools.islice(
+                SERVER.iter_looped_frames(
+                    stream,
+                    loop_stream=True,
+                    continuous_root=True,
+                ),
+                4,
+            )
+        )
+        self.assertEqual(
+            [packet["root_position"] for packet in packets],
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 100.0, 0.0],
+                [0.0, 100.0, 0.0],
+                [0.0, 200.0, 0.0],
+            ],
+        )
+
+    def test_continuous_root_can_reset_after_three_cycles(self):
+        stream = sample_stream()
+        stream["frames"] = [
+            {
+                **stream["frames"][0],
+                "root_position": [0.0, 0.0, 0.0],
+            },
+            {
+                **stream["frames"][0],
+                "root_position": [0.0, 100.0, 0.0],
+            },
+        ]
+        packets = list(
+            itertools.islice(
+                SERVER.iter_looped_frames(
+                    stream,
+                    loop_stream=True,
+                    continuous_root=True,
+                    continuous_root_cycles=3,
+                ),
+                8,
+            )
+        )
+        self.assertEqual(
+            [packet["root_position"] for packet in packets],
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 100.0, 0.0],
+                [0.0, 100.0, 0.0],
+                [0.0, 200.0, 0.0],
+                [0.0, 200.0, 0.0],
+                [0.0, 300.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 100.0, 0.0],
+            ],
         )

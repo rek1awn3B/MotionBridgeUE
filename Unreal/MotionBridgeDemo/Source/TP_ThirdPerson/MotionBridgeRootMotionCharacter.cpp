@@ -147,12 +147,11 @@ void AMotionBridgeRootMotionCharacter::ConfigurePortfolioWalkDemo()
         ReceiverComponent->bConsumeRootMotionAsActorMovement = true;
     }
 
-    // Runtime Retarget 已经通过目标骨架根设置恢复了绝大部分角色高度，
-    // 这里只补偿 Manny 脚底相对胶囊底面的剩余约 8 cm。必须在 BeginPlay
-    // 前设置，让 ACharacter 正确缓存初始 Mesh Offset。
-    GetMesh()->SetRelativeLocation(FVector(0.0f, 0.0f, -8.0f));
-    RuntimeRetargetProbeMesh->SetRelativeLocation(
-        FVector(0.0f, 0.0f, -8.0f));
+    // 可见 Manny 与隐藏重定向探针必须使用同一整体高度。此前两者统一下移
+    // 8 cm，使原始直腿步态陷入地面；Foot IK 只能单独抬脚，因而产生持续
+    // 屈膝。恢复到胶囊原点后，原动作先站到正确高度，Foot IK 只做小修正。
+    GetMesh()->SetRelativeLocation(FVector::ZeroVector);
+    RuntimeRetargetProbeMesh->SetRelativeLocation(FVector::ZeroVector);
 
     RootMotionAnimation = LoadObject<UAnimSequence>(
         nullptr,

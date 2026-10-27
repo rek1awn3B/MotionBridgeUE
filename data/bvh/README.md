@@ -18,7 +18,8 @@ for the public MotionBridge demo.
 
 - Dataset: <https://www.ianxmason.com/100style/>
 - Original file: `Neutral_FW.bvh`
-- Included frame ranges: 507–687, 530–694, and 2093–2176, inclusive
+- Included frame ranges: 470–694 (default demo), 507–687, 530–694
+  (calibration/acceptance), and 2093–2176, inclusive
 - Capture rate: 60 FPS
 - License: [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 - Attribution: The 100STYLE Dataset - Ian Mason

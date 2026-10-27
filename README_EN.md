@@ -48,6 +48,6 @@ py -3.12 -m unittest discover -s python -p "test_bvh_stream.py" -v
 
 The final realtime acceptance verifies an 89-bone direct Manny snapshot, zero rejected frames, three forced reconnects, runtime foot IK with positive sole clearance, and all four Morph Target channels. Full markers and commands are recorded in [docs/final_acceptance.md](docs/final_acceptance.md).
 
-The complete Python suite passes 55/55 tests, including four raw-BVH runtime conversion tests and source-provenance metadata coverage.
+The complete Python suite passes 57/57 tests, including raw-BVH runtime conversion, looped-root-motion, and source-provenance coverage. The default portfolio demo plays the unmodified 470–694 frame excerpt (about 3.75 seconds), returns the actor to its start after each pass, and repeats on a 12 m × 12 m floor.
 
 Public motion data comes from the CC BY 4.0 100STYLE dataset. Project code is released under the [MIT License](LICENSE); third-party and Epic Games assets retain their own terms as documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

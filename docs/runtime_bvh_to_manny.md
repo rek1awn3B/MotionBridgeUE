@@ -40,11 +40,15 @@ R_target_local(j, f)
 
 运行时输入：
 
-- `data/bvh/100style/Neutral_FW_frames_530_694.bvh`
+- `data/bvh/100style/Neutral_FW_frames_470_694.bvh`（默认公开演示）
 - `data/calibration/100style_source_calibration.json`
 - `data/calibration/100style_to_manny_calibration.json`
 
 `tools/motionbridge_websocket_server.py` 的默认 BVH 路径会进入 `build_manny_stream_from_bvh()`。这条函数先从原始 BVH 创建规范源姿势，再应用固定 Manny 校准；它不打开两份参考姿势流。
+
+两级校准和自动验收继续使用其原始对齐窗口
+`Neutral_FW_frames_530_694.bvh`，以保证保存的校准误差可复现；默认演示只是在
+同一原始文件中向前扩展到第 470 帧，不改变骨架、通道顺序或采样率。
 
 ## 可复现验证
 
